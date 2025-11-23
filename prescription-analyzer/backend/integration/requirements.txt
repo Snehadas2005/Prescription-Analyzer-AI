@@ -1,0 +1,36 @@
+# Web & API
+streamlit==1.28.1
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+python-dotenv==1.0.0
+python-jose==3.3.0
+
+# Core ML/OCR
+opencv-python==4.8.1.78
+numpy==1.26.4
+Pillow==10.3.0
+easyocr==1.7.0
+pytesseract==0.3.10
+scikit-image==0.25.2
+
+# NLP
+spacy==3.7.2
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.23.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+
+# LangChain & AI
+langchain==0.0.292
+langchain-openai==0.0.2
+langchain-core==0.1.53
+langsmith==0.0.70    # last version <0.1.0, keeps langchain happy
+cohere==4.32
+
+# Data & Utils
+pandas==2.0.3
+pydantic==2.5.0
+python-dateutil==2.8.2
+hashlib-compat
+pickle5
