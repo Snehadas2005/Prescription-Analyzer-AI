@@ -4,15 +4,11 @@ import {
   FileText,
   User,
   Pill,
-  ShoppingCart,
   CheckCircle,
   AlertCircle,
   Clock,
   Star,
   Activity,
-  MapPin,
-  Phone,
-  Calendar,
   Stethoscope,
   Heart,
   XCircle,
@@ -25,15 +21,10 @@ const EnhancedPrescriptionAnalyzer = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [orderStatus, setOrderStatus] = useState(null);
   const [activeTab, setActiveTab] = useState("upload");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [contactNumber, setContactNumber] = useState("");
-  const [selectedMedicines, setSelectedMedicines] = useState({});
   const [error, setError] = useState(null);
-  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
 
-  // API base URL - Update this to your backend URL
+  // API base URL
   const API_BASE_URL = "http://localhost:8000";
 
   const handleFileSelect = useCallback((event) => {
@@ -42,7 +33,6 @@ const EnhancedPrescriptionAnalyzer = () => {
       if (file.type.startsWith("image/")) {
         setSelectedFile(file);
         setAnalysisResult(null);
-        setOrderStatus(null);
         setError(null);
       } else {
         setError("Please select an image file (JPEG, PNG, etc.)");
@@ -50,7 +40,7 @@ const EnhancedPrescriptionAnalyzer = () => {
     }
   }, []);
 
-  const analyzePrescrição = async () => {
+  const analyzePrescription = async () => {
     if (!selectedFile) return;
 
     setIsAnalyzing(true);
@@ -58,11 +48,9 @@ const EnhancedPrescriptionAnalyzer = () => {
     setError(null);
 
     try {
-      // Create FormData for file upload
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      // Call the actual backend API
       const response = await fetch(`${API_BASE_URL}/api/analyze-prescription`, {
         method: "POST",
         body: formData,
@@ -77,15 +65,6 @@ const EnhancedPrescriptionAnalyzer = () => {
       if (result.success) {
         setAnalysisResult(result);
         setActiveTab("results");
-        
-        // Initialize medicine selection
-        const initialSelection = {};
-        if (result.medicines && result.medicines.length > 0) {
-          result.medicines.forEach(med => {
-            initialSelection[med.name] = med.available ? 1 : 0;
-          });
-          setSelectedMedicines(initialSelection);
-        }
       } else {
         setError(result.error || "Failed to analyze prescription");
       }
@@ -97,72 +76,11 @@ const EnhancedPrescriptionAnalyzer = () => {
     }
   };
 
-  const createOrder = async () => {
-    if (!analysisResult || !analysisResult.success) return;
-
-    if (!deliveryAddress.trim() || !contactNumber.trim()) {
-      setError("Please provide both delivery address and contact number");
-      return;
-    }
-
-    setIsCreatingOrder(true);
+  const handleNewAnalysis = () => {
+    setSelectedFile(null);
+    setAnalysisResult(null);
+    setActiveTab("upload");
     setError(null);
-
-    try {
-      const selectedMeds = analysisResult.medicines.filter(med => 
-        selectedMedicines[med.name] > 0
-      ).map(med => ({
-        ...med,
-        quantity: selectedMedicines[med.name]
-      }));
-
-      if (selectedMeds.length === 0) {
-        setError("Please select at least one medicine to order");
-        setIsCreatingOrder(false);
-        return;
-      }
-
-      const orderData = {
-        prescription_id: analysisResult.prescription_id,
-        patient_info: analysisResult.patient,
-        medicines: selectedMeds,
-        delivery_address: deliveryAddress,
-        contact_number: contactNumber,
-      };
-
-      const response = await fetch(`${API_BASE_URL}/api/create-order`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const orderResult = await response.json();
-      
-      if (orderResult.success) {
-        setOrderStatus(orderResult);
-        setActiveTab("order");
-      } else {
-        setError(orderResult.error || "Failed to create order");
-      }
-    } catch (error) {
-      console.error("Error creating order:", error);
-      setError(`Failed to create order: ${error.message}`);
-    } finally {
-      setIsCreatingOrder(false);
-    }
-  };
-
-  const handleMedicineQuantityChange = (medicineName, quantity) => {
-    setSelectedMedicines(prev => ({
-      ...prev,
-      [medicineName]: parseInt(quantity) || 0
-    }));
   };
 
   const ConfidenceBar = ({ score }) => (
@@ -217,7 +135,7 @@ const EnhancedPrescriptionAnalyzer = () => {
             <h1>AI Prescription Analyzer</h1>
           </div>
           <p className="app-subtitle">
-            Upload your prescription for instant analysis and medicine ordering
+            Upload your prescription for instant AI-powered analysis
           </p>
         </div>
 
@@ -249,13 +167,6 @@ const EnhancedPrescriptionAnalyzer = () => {
               isDisabled={!analysisResult?.success}
             >
               Results
-            </TabButton>
-            <TabButton 
-              tab="order" 
-              isActive={activeTab === "order"}
-              isDisabled={!orderStatus}
-            >
-              Order
             </TabButton>
           </div>
         </div>
@@ -312,7 +223,7 @@ const EnhancedPrescriptionAnalyzer = () => {
               {selectedFile && (
                 <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                   <button
-                    onClick={analyzePrescrição}
+                    onClick={analyzePrescription}
                     disabled={isAnalyzing}
                     className={`btn ${isAnalyzing ? '' : 'btn-primary'}`}
                   >
@@ -397,7 +308,7 @@ const EnhancedPrescriptionAnalyzer = () => {
               </div>
               <ConfidenceBar score={analysisResult.confidence_score || 0} />
               <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                Higher confidence indicates better text extraction and medicine identification
+                Higher confidence indicates better text extraction and information accuracy
               </p>
             </div>
 
@@ -444,6 +355,12 @@ const EnhancedPrescriptionAnalyzer = () => {
                     <span style={{ color: '#6b7280' }}>Name:</span>
                     <span style={{ fontWeight: '500' }}>
                       {analysisResult.doctor?.name || analysisResult.doctor_name || "Not specified"}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6b7280' }}>Specialization:</span>
+                    <span style={{ fontWeight: '500' }}>
+                      {analysisResult.doctor?.specialization || "Not specified"}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -515,13 +432,13 @@ const EnhancedPrescriptionAnalyzer = () => {
                           ) : (
                             <>
                               <AlertCircle size={16} style={{ marginRight: '0.25rem' }} />
-                              Out of Stock
+                              Check Availability
                             </>
                           )}
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-4" style={{ gap: '1rem', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                      <div className="grid grid-cols-3" style={{ gap: '1rem', fontSize: '0.875rem' }}>
                         <div>
                           <span style={{ color: '#6b7280' }}>Dosage:</span>
                           <p style={{ fontWeight: '500' }}>{medicine.dosage || "As prescribed"}</p>
@@ -534,24 +451,10 @@ const EnhancedPrescriptionAnalyzer = () => {
                           <span style={{ color: '#6b7280' }}>Duration:</span>
                           <p style={{ fontWeight: '500' }}>{medicine.duration || "As prescribed"}</p>
                         </div>
-                        <div>
-                          <span style={{ color: '#6b7280' }}>Quantity for Order:</span>
-                          <select
-                            value={selectedMedicines[medicine.name] || 0}
-                            onChange={(e) => handleMedicineQuantityChange(medicine.name, e.target.value)}
-                            disabled={!medicine.available}
-                            className="form-select"
-                            style={{ marginTop: '0.25rem', padding: '0.5rem', fontSize: '0.875rem' }}
-                          >
-                            {[0, 1, 2, 3, 4, 5].map(num => (
-                              <option key={num} value={num}>{num}</option>
-                            ))}
-                          </select>
-                        </div>
                       </div>
                       
                       {medicine.instructions && (
-                        <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #f3f4f6' }}>
+                        <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #f3f4f6', marginTop: '0.75rem' }}>
                           <span style={{ color: '#6b7280' }}>Instructions:</span>
                           <p style={{ color: '#1f2937', marginTop: '0.25rem' }}>{medicine.instructions}</p>
                         </div>
@@ -566,142 +469,36 @@ const EnhancedPrescriptionAnalyzer = () => {
               )}
             </div>
 
-            {/* Order Section */}
-            <div className="card">
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937', marginBottom: '1.5rem' }}>
-                Delivery Details
-              </h3>
-              <div className="grid grid-cols-2" style={{ gap: '1rem', marginBottom: '1.5rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                    <MapPin size={16} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                    Delivery Address
-                  </label>
-                  <textarea
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Enter your complete delivery address..."
-                    className="form-textarea"
-                    rows="3"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>
-                    <Phone size={16} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                    Contact Number
-                  </label>
-                  <input
-                    type="text"
-                    value={contactNumber}
-                    onChange={(e) => setContactNumber(e.target.value)}
-                    placeholder="Enter your contact number..."
-                    className="form-input"
-                  />
-                </div>
-              </div>
-              
-              <div style={{ textAlign: 'center' }}>
-                <button
-                  onClick={createOrder}
-                  disabled={!deliveryAddress || !contactNumber || isCreatingOrder}
-                  className={`btn ${
-                    !deliveryAddress || !contactNumber || isCreatingOrder ? '' : 'btn-success'
-                  }`}
-                >
-                  {isCreatingOrder ? (
-                    <>
-                      <Loader2 size={20} className="loading-spinner" style={{ marginRight: '0.5rem' }} />
-                      Creating Order...
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart size={20} style={{ marginRight: '0.5rem' }} />
-                      Place Order
-                    </>
-                  )}
-                </button>
-              </div>
+            {/* New Analysis Button */}
+            <div className="card" style={{ textAlign: 'center' }}>
+              <button
+                onClick={handleNewAnalysis}
+                className="btn btn-primary"
+              >
+                <Upload size={20} style={{ marginRight: '0.5rem' }} />
+                Analyze New Prescription
+              </button>
             </div>
-          </div>
-        )}
 
-        {/* Order Status Section */}
-        {activeTab === "order" && orderStatus && (
-          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <div className="card">
-              {orderStatus.success ? (
-                <div style={{ textAlign: 'center' }}>
-                  <CheckCircle size={64} color="#10b981" style={{ margin: '0 auto 1rem' }} />
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#1f2937', marginBottom: '1rem' }}>
-                    Order Confirmed!
-                  </h2>
-                  
-                  <div style={{ 
-                    background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', 
-                    borderRadius: '1rem', 
-                    padding: '1.5rem', 
-                    marginBottom: '1.5rem' 
-                  }}>
-                    <div className="grid grid-cols-2" style={{ gap: '1rem', textAlign: 'left' }}>
-                      <div>
-                        <span style={{ color: '#6b7280' }}>Order ID:</span>
-                        <p style={{ fontWeight: '700', color: '#166534' }}>{orderStatus.order_id}</p>
-                      </div>
-                      <div>
-                        <span style={{ color: '#6b7280' }}>Estimated Delivery:</span>
-                        <p style={{ fontWeight: '700', color: '#166534' }}>{orderStatus.estimated_delivery}</p>
-                      </div>
-                      <div>
-                        <span style={{ color: '#6b7280' }}>Total Amount:</span>
-                        <p style={{ fontWeight: '700', color: '#166534' }}>₹{orderStatus.total_amount}</p>
-                      </div>
-                      <div>
-                        <span style={{ color: '#6b7280' }}>Status:</span>
-                        <p style={{ fontWeight: '700', color: '#166534' }}>Confirmed</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
-                    <p style={{ color: '#374151', marginBottom: '0.5rem' }}>
-                      <strong>Delivery Address:</strong> {deliveryAddress}
-                    </p>
-                    <p style={{ color: '#374151' }}>
-                      <strong>Contact:</strong> {contactNumber}
-                    </p>
-                  </div>
-
-                  <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                    You will receive SMS updates about your order status
-                  </p>
-
-                  <button
-                    onClick={() => {
-                      setActiveTab("upload");
-                      setSelectedFile(null);
-                      setAnalysisResult(null);
-                      setOrderStatus(null);
-                      setDeliveryAddress("");
-                      setContactNumber("");
-                      setSelectedMedicines({});
-                      setError(null);
-                    }}
-                    className="btn btn-primary"
-                  >
-                    Analyze New Prescription
-                  </button>
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center' }}>
-                  <AlertCircle size={64} color="#ef4444" style={{ margin: '0 auto 1rem' }} />
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#1f2937', marginBottom: '0.5rem' }}>
-                    Order Failed
-                  </h2>
-                  <p style={{ color: '#ef4444' }}>
-                    {orderStatus.error || "Unable to place order. Please try again."}
+            {/* Disclaimer */}
+            <div className="card" style={{ 
+              background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.5), rgba(253, 230, 138, 0.3))',
+              border: '2px solid rgba(251, 191, 36, 0.3)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
+                <AlertTriangle size={24} color="#f59e0b" style={{ flexShrink: 0, marginTop: '0.25rem' }} />
+                <div>
+                  <h4 style={{ fontWeight: '600', color: '#92400e', marginBottom: '0.5rem' }}>
+                    Medical Disclaimer
+                  </h4>
+                  <p style={{ color: '#78350f', fontSize: '0.875rem', lineHeight: '1.5' }}>
+                    This is an AI-powered analysis tool for informational purposes only. 
+                    Always verify the extracted information with the original prescription and 
+                    consult with qualified healthcare professionals before taking any medication. 
+                    Do not rely solely on this analysis for medical decisions.
                   </p>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
