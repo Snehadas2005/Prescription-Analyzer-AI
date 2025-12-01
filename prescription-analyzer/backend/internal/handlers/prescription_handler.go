@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type PrescriptionHandler struct {
@@ -57,30 +59,40 @@ type Medicine struct {
 	Quantity  int    `json:"quantity" bson:"quantity"`
 }
 
+type MLExtractionResult struct {
+	ID         string                 `json:"prescription_id"`
+	Patient    map[string]interface{} `json:"patient"`
+	Doctor     map[string]interface{} `json:"doctor"`
+	Medicines  []map[string]interface{} `json:"medicines"`
+	Confidence float64                `json:"confidence_score"`
+	RawText    string                 `json:"raw_text"`
+}
+
+// StorageService interface
+type StorageService interface {
+	UploadImage(data []byte, filename string) (string, error)
+}
+
 func NewPrescriptionHandler(db *mongo.Database) *PrescriptionHandler {
 	return &PrescriptionHandler{
 		db:             db,
 		mlServiceURL:   getEnv("ML_SERVICE_URL", "http://localhost:8000"),
-		storageService: NewSupabaseStorage(),
+		storageService: NewLocalStorage(),
 	}
 }
 
-// Upload handles prescription image upload and extraction
 func (h *PrescriptionHandler) Upload(c *gin.Context) {
-	// Get uploaded file
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
 		return
 	}
 
-	// Validate file type
 	if !isValidImageType(file.Filename) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
 		return
 	}
 
-	// Read file
 	fileContent, err := file.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
@@ -94,26 +106,23 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// Upload to storage
 	imageURL, err := h.storageService.UploadImage(fileBytes, file.Filename)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
 		return
 	}
 
-	// Call ML service for extraction
 	extractionResult, err := h.callMLService(fileBytes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to extract information"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to extract information: %v", err)})
 		return
 	}
 
-	// Create prescription record
 	prescription := Prescription{
 		PrescriptionID: extractionResult.ID,
-		Patient:        extractionResult.Patient,
-		Doctor:         extractionResult.Doctor,
-		Medicines:      extractionResult.Medicines,
+		Patient:        convertPatientInfo(extractionResult.Patient),
+		Doctor:         convertDoctorInfo(extractionResult.Doctor),
+		Medicines:      convertMedicines(extractionResult.Medicines),
 		Confidence:     extractionResult.Confidence,
 		ImageURL:       imageURL,
 		RawText:        extractionResult.RawText,
@@ -122,7 +131,6 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 		UpdatedAt:      time.Now(),
 	}
 
-	// Save to database
 	collection := h.db.Collection("prescriptions")
 	result, err := collection.InsertOne(c.Request.Context(), prescription)
 	if err != nil {
@@ -132,7 +140,6 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 
 	prescription.ID = result.InsertedID.(primitive.ObjectID)
 
-	// Trigger background job for continuous learning
 	go h.triggerLearningPipeline(prescription)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -141,20 +148,16 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	})
 }
 
-// Get retrieves a prescription by ID
 func (h *PrescriptionHandler) Get(c *gin.Context) {
 	id := c.Param("id")
-
 	var prescription Prescription
 	collection := h.db.Collection("prescriptions")
 
-	// Try to find by prescription_id first
 	err := collection.FindOne(c.Request.Context(), bson.M{
 		"prescription_id": id,
 	}).Decode(&prescription)
 
 	if err != nil {
-		// Try to find by MongoDB _id
 		objectID, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid prescription ID"})
@@ -177,31 +180,26 @@ func (h *PrescriptionHandler) Get(c *gin.Context) {
 	})
 }
 
-// GetHistory retrieves prescription history
 func (h *PrescriptionHandler) GetHistory(c *gin.Context) {
-	// Get query parameters
-	limit := c.DefaultQuery("limit", "10")
-	page := c.DefaultQuery("page", "1")
+	limit := 10
+	page := 1
+	
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if p := c.Query("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
 
-	// Parse parameters
-	var limitInt, pageInt int
-	fmt.Sscanf(limit, "%d", &limitInt)
-	fmt.Sscanf(page, "%d", &pageInt)
+	skip := int64((page - 1) * limit)
 
-	skip := (pageInt - 1) * limitInt
-
-	// Query database
 	collection := h.db.Collection("prescriptions")
-	cursor, err := collection.Find(
-		c.Request.Context(),
-		bson.M{},
-		&mongo.FindOptions{
-			Limit: int64Ptr(int64(limitInt)),
-			Skip:  int64Ptr(int64(skip)),
-			Sort:  bson.D{{Key: "created_at", Value: -1}},
-		},
-	)
+	findOptions := options.Find()
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSkip(skip)
+	findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}})
 
+	cursor, err := collection.Find(c.Request.Context(), bson.M{}, findOptions)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch history"})
 		return
@@ -214,24 +212,18 @@ func (h *PrescriptionHandler) GetHistory(c *gin.Context) {
 		return
 	}
 
-	// Get total count
-	total, err := collection.CountDocuments(c.Request.Context(), bson.M{})
-	if err != nil {
-		total = 0
-	}
+	total, _ := collection.CountDocuments(c.Request.Context(), bson.M{})
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    prescriptions,
 		"total":   total,
-		"page":    pageInt,
-		"limit":   limitInt,
+		"page":    page,
+		"limit":   limit,
 	})
 }
 
-// callMLService calls the Python ML service for extraction
 func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionResult, error) {
-	// Create multipart form
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -240,14 +232,12 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, err
 	}
 
-	_, err = io.Copy(part, bytes.NewReader(imageBytes))
-	if err != nil {
+	if _, err = io.Copy(part, bytes.NewReader(imageBytes)); err != nil {
 		return nil, err
 	}
 
 	writer.Close()
 
-	// Make HTTP request
 	req, err := http.NewRequest("POST", h.mlServiceURL+"/extract", body)
 	if err != nil {
 		return nil, err
@@ -255,7 +245,7 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -263,10 +253,10 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ML service returned status %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ML service returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// Parse response
 	var result MLExtractionResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
@@ -275,11 +265,9 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 	return &result, nil
 }
 
-// triggerLearningPipeline triggers the continuous learning pipeline
 func (h *PrescriptionHandler) triggerLearningPipeline(prescription Prescription) {
-	// This runs in background
-	// Store the prescription for future training
 	collection := h.db.Collection("training_data")
+	ctx := context.Background()
 
 	trainingData := bson.M{
 		"prescription_id": prescription.PrescriptionID,
@@ -294,19 +282,62 @@ func (h *PrescriptionHandler) triggerLearningPipeline(prescription Prescription)
 		"created_at": time.Now(),
 	}
 
-	collection.InsertOne(nil, trainingData)
-}
-
-type MLExtractionResult struct {
-	ID         string      `json:"id"`
-	Patient    PatientInfo `json:"patient"`
-	Doctor     DoctorInfo  `json:"doctor"`
-	Medicines  []Medicine  `json:"medicines"`
-	Confidence float64     `json:"confidence"`
-	RawText    string      `json:"raw_text"`
+	collection.InsertOne(ctx, trainingData)
 }
 
 // Helper functions
+func convertPatientInfo(data map[string]interface{}) PatientInfo {
+	return PatientInfo{
+		Name:   getString(data, "name"),
+		Age:    getString(data, "age"),
+		Gender: getString(data, "gender"),
+	}
+}
+
+func convertDoctorInfo(data map[string]interface{}) DoctorInfo {
+	return DoctorInfo{
+		Name:           getString(data, "name"),
+		Specialization: getString(data, "specialization"),
+		Registration:   getString(data, "registration"),
+	}
+}
+
+func convertMedicines(data []map[string]interface{}) []Medicine {
+	medicines := make([]Medicine, 0, len(data))
+	for _, m := range data {
+		medicines = append(medicines, Medicine{
+			Name:      getString(m, "name"),
+			Dosage:    getString(m, "dosage"),
+			Frequency: getString(m, "frequency"),
+			Timing:    getString(m, "timing"),
+			Duration:  getString(m, "duration"),
+			Quantity:  getInt(m, "quantity"),
+		})
+	}
+	return medicines
+}
+
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case int:
+			return val
+		case float64:
+			return int(val)
+		}
+	}
+	return 0
+}
+
 func isValidImageType(filename string) bool {
 	validTypes := []string{".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
 	for _, ext := range validTypes {
@@ -316,10 +347,6 @@ func isValidImageType(filename string) bool {
 		}
 	}
 	return false
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
 }
 
 func getEnv(key, fallback string) string {
