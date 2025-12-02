@@ -25,7 +25,7 @@ const EnhancedPrescriptionAnalyzer = () => {
   const [error, setError] = useState(null);
 
   // API base URL
-  const API_BASE_URL = "http://localhost:8000";
+ const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080/api/v1";
 
   const handleFileSelect = useCallback((event) => {
     const file = event.target.files[0];
@@ -51,7 +51,7 @@ const EnhancedPrescriptionAnalyzer = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await fetch(`${API_BASE_URL}/api/analyze-prescription`, {
+      const response = await fetch(`${API_BASE_URL}/upload`, {
         method: "POST",
         body: formData,
       });

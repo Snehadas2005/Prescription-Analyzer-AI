@@ -3,6 +3,10 @@
 .env.local
 .env.production
 .env.*.local
+backed/.env
+frontend/.env
+ml-service/.env
+/.env
 *.key
 *.pem
 *.p12

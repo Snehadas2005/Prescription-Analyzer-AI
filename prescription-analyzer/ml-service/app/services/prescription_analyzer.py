@@ -472,7 +472,7 @@ class EnhancedPrescriptionAnalyzer:
         return self._analyze_with_cohere_api(extracted_text, ocr_confidence)
 
     def _analyze_with_cohere_api(self, extracted_text: str, ocr_confidence: float) -> Dict:
-        """Enhanced Cohere API analysis with updated model"""
+        """Enhanced Cohere API analysis with better prompting for doctor/patient identification"""
         
         # First, try pattern-based extraction
         doctor_info, patient_info = self.extract_doctor_patient_info(extracted_text)
@@ -524,9 +524,8 @@ class EnhancedPrescriptionAnalyzer:
         """
 
         try:
-            # UPDATED: Use command-r-plus which is still available
             response = self.co.chat(
-                model="command-r-plus",  # Changed from "command-r"
+                model="command-r",
                 message="Return ONLY valid JSON. Do not add json blocks, backticks, or any explanation.\n\n" + prompt
             )
 
@@ -575,12 +574,11 @@ class EnhancedPrescriptionAnalyzer:
             logger.error(f"Raw response: {raw_text}")
             # Fallback to pattern-based extraction
             return self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
-        
         except Exception as e:
             logger.error(f"Cohere API error: {e}")
             # Fallback to pattern-based extraction
             return self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
-    
+
     def _validate_and_enhance_extraction(self, data: Dict, doctor_info: Dict, patient_info: Dict) -> Dict:
         """Validate and enhance the extracted data using pattern-based results"""
         
