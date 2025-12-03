@@ -1,5 +1,3 @@
-// Updated prescription_handler.go with correct ML service integration
-
 package handlers
 
 import (
@@ -9,13 +7,14 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// MLExtractionResult represents the response from ML service
 type MLExtractionResult struct {
 	Success         bool                     `json:"success"`
 	PrescriptionID  string                   `json:"prescription_id"`
@@ -28,6 +27,7 @@ type MLExtractionResult struct {
 	Message         string                   `json:"message,omitempty"`
 }
 
+// callMLService calls the ML service to analyze prescription
 func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionResult, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -53,20 +53,20 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 120 * time.Second} // Increased timeout
+	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call ML service: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ML service returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ML service returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result MLExtractionResult
@@ -82,6 +82,7 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 	return &result, nil
 }
 
+// Upload handles prescription upload
 func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -151,7 +152,7 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	})
 }
 
-// Helper functions remain the same...
+// Helper functions
 func convertPatientInfo(data map[string]interface{}) PatientInfo {
 	return PatientInfo{
 		Name:   getString(data, "name"),
@@ -215,9 +216,56 @@ func isValidImageType(filename string) bool {
 	return false
 }
 
-func getEnv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// Get retrieves a prescription by ID
+func (h *PrescriptionHandler) Get(c *gin.Context) {
+	id := c.Param("id")
+
+	var prescription Prescription
+	collection := h.db.Collection("prescriptions")
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid prescription ID"})
+		return
 	}
-	return fallback
+
+	err = collection.FindOne(c.Request.Context(), map[string]interface{}{"_id": objID}).Decode(&prescription)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Prescription not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve prescription"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    prescription,
+	})
+}
+
+// GetHistory retrieves prescription history
+func (h *PrescriptionHandler) GetHistory(c *gin.Context) {
+	// TODO: Add pagination support
+	collection := h.db.Collection("prescriptions")
+
+	cursor, err := collection.Find(c.Request.Context(), map[string]interface{}{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve history"})
+		return
+	}
+	defer cursor.Close(c.Request.Context())
+
+	var prescriptions []Prescription
+	if err = cursor.All(c.Request.Context(), &prescriptions); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    prescriptions,
+		"total":   len(prescriptions),
+	})
 }
