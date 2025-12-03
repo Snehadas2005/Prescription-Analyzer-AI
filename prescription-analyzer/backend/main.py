@@ -156,15 +156,15 @@ async def startup_event():
             force_api=False  # Allow fallback to pattern matching
         )
         
-        logger.info("Enhanced Prescription Analyzer initialized successfully")
+        logger.info("✅ Enhanced Prescription Analyzer initialized successfully")
         
         if hasattr(analyzer, 'co') and analyzer.co:
-            logger.info("Cohere API available - Advanced NLP analysis enabled")
+            logger.info("✅ Cohere API available - Advanced NLP analysis enabled")
         else:
-            logger.warning("No Cohere API key - Using pattern-based analysis")
+            logger.warning("⚠️ No Cohere API key - Using pattern-based analysis")
             
     except Exception as e:
-        logger.error(f"Failed to initialize analyzer: {e}")
+        logger.error(f"❌ Failed to initialize analyzer: {e}")
         raise RuntimeError(f"Analyzer initialization failed: {e}")
 
 @app.on_event("shutdown")
@@ -212,6 +212,7 @@ async def analyze_prescription(file: UploadFile = File(...)):
         AnalysisResponse with extracted prescription data
     """
     if not analyzer:
+        logger.error("Analyzer not initialized")
         raise HTTPException(
             status_code=503, 
             detail="Analyzer not initialized. Please check server configuration."
@@ -219,6 +220,7 @@ async def analyze_prescription(file: UploadFile = File(...)):
     
     # Validate file type
     if not file.content_type or not file.content_type.startswith('image/'):
+        logger.error(f"Invalid file type: {file.content_type}")
         raise HTTPException(
             status_code=400, 
             detail="Invalid file type. Please upload an image file"
@@ -242,6 +244,8 @@ async def analyze_prescription(file: UploadFile = File(...)):
             content = await file.read()
             file_size = len(content)
             
+            logger.info(f"📄 Received file: {file.filename}, Size: {file_size} bytes, Type: {file.content_type}")
+            
             # Check file size
             if file_size > 10 * 1024 * 1024:
                 raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB")
@@ -252,13 +256,13 @@ async def analyze_prescription(file: UploadFile = File(...)):
             temp_file.write(content)
             temp_file.flush()
         
-        logger.info(f"Processing prescription file: {file.filename}, Size: {file_size} bytes")
+        logger.info(f"🔄 Processing prescription file: {file.filename}")
         
         # Analyze prescription
         result = analyzer.analyze_prescription(temp_file_path)
         
         if not result.success:
-            logger.warning(f"Analysis failed for prescription {result.prescription_id}: {result.error}")
+            logger.warning(f"⚠️ Analysis failed for prescription {result.prescription_id}: {result.error}")
             safe_error_data = ensure_safe_response_data({
                 'success': False,
                 'error': result.error,
@@ -269,7 +273,11 @@ async def analyze_prescription(file: UploadFile = File(...)):
         # Convert to JSON format
         json_result = analyzer.to_json(result)
         
-        logger.info(f"Analysis completed successfully for prescription {result.prescription_id}")
+        logger.info(f"✅ Analysis completed successfully for prescription {result.prescription_id}")
+        logger.info(f"   Doctor: {result.doctor.name or 'N/A'}")
+        logger.info(f"   Patient: {result.patient.name or 'N/A'}")
+        logger.info(f"   Medicines: {len(result.medicines)}")
+        logger.info(f"   Confidence: {result.confidence_score:.2%}")
         
         # Ensure response data is safe
         safe_data = ensure_safe_response_data(json_result)
@@ -277,7 +285,7 @@ async def analyze_prescription(file: UploadFile = File(...)):
         try:
             return AnalysisResponse(**safe_data)
         except Exception as validation_error:
-            logger.error(f"Validation error: {validation_error}")
+            logger.error(f"❌ Validation error: {validation_error}")
             fallback_data = ensure_safe_response_data({
                 'success': result.success,
                 'prescription_id': result.prescription_id,
@@ -289,7 +297,7 @@ async def analyze_prescription(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error analyzing prescription: {str(e)}")
+        logger.error(f"❌ Error analyzing prescription: {str(e)}", exc_info=True)
         safe_error_data = ensure_safe_response_data({
             'success': False,
             'error': str(e),
@@ -300,8 +308,9 @@ async def analyze_prescription(file: UploadFile = File(...)):
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
+                logger.debug(f"🗑️ Cleaned up temp file: {temp_file_path}")
             except Exception as e:
-                logger.warning(f"Failed to clean up temp file: {e}")
+                logger.warning(f"⚠️ Failed to clean up temp file: {e}")
 
 @app.get("/api/stats")
 async def get_stats():
@@ -337,7 +346,7 @@ if __name__ == "__main__":
     HOST = os.getenv('HOST', '0.0.0.0')
     PORT = int(os.getenv('PORT', 8000))
     
-    logger.info(f"Starting AI Prescription Analyzer API on {HOST}:{PORT}")
+    logger.info(f"🚀 Starting AI Prescription Analyzer API on {HOST}:{PORT}")
     
     uvicorn.run(
         "main:app",
