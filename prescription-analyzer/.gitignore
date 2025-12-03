@@ -3,7 +3,7 @@
 .env.local
 .env.production
 .env.*.local
-backed/.env
+backend/.env
 frontend/.env
 ml-service/.env
 /.env
