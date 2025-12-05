@@ -45,8 +45,7 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	// ✅ IMPORTANT CHANGE HERE
-	req, err := http.NewRequest("POST", h.mlServiceURL+"/extract", body)
+	req, err := http.NewRequest("POST", h.mlServiceURL+"/analyze-prescription", body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
