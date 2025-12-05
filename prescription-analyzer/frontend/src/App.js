@@ -1,12 +1,10 @@
 import React, { useState, useCallback } from "react";
 import {
   Upload,
-  FileText,
   User,
   Pill,
   CheckCircle,
   AlertCircle,
-  Clock,
   Star,
   Activity,
   Stethoscope,

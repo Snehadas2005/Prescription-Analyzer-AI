@@ -205,103 +205,176 @@ async def analyze_prescription(file: UploadFile = File(...)):
     """
     Analyze uploaded prescription image
     
-    Args:
-        file: Uploaded image file (JPEG, PNG, TIFF)
-        
-    Returns:
-        AnalysisResponse with extracted prescription data
+    Returns JSON compatible with the Go MLExtractionResult struct:
+    {
+        "success": bool,
+        "prescription_id": str,
+        "patient": {...},
+        "doctor": {...},
+        "medicines": [...],
+        "confidence_score": float,
+        "raw_text": str,
+        "error": str | null,
+        "message": str | null
+    }
     """
     if not analyzer:
         logger.error("Analyzer not initialized")
         raise HTTPException(
-            status_code=503, 
+            status_code=503,
             detail="Analyzer not initialized. Please check server configuration."
         )
-    
+
     # Validate file type
-    if not file.content_type or not file.content_type.startswith('image/'):
+    if not file.content_type or not file.content_type.startswith("image/"):
         logger.error(f"Invalid file type: {file.content_type}")
         raise HTTPException(
-            status_code=400, 
-            detail="Invalid file type. Please upload an image file"
+            status_code=400,
+            detail="Invalid file type. Please upload an image file",
         )
-    
+
     temp_file_path = None
-    
+
     try:
-        # Create temporary file
-        file_extension = '.jpg'
+        # Decide extension from content-type
+        file_extension = ".jpg"
         if file.content_type:
-            if 'png' in file.content_type:
-                file_extension = '.png'
-            elif 'tiff' in file.content_type:
-                file_extension = '.tiff'
-            elif 'bmp' in file.content_type:
-                file_extension = '.bmp'
-        
+            if "png" in file.content_type:
+                file_extension = ".png"
+            elif "tiff" in file.content_type:
+                file_extension = ".tiff"
+            elif "bmp" in file.content_type:
+                file_extension = ".bmp"
+
+        # Save to a temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
             temp_file_path = temp_file.name
             content = await file.read()
             file_size = len(content)
-            
-            logger.info(f"📄 Received file: {file.filename}, Size: {file_size} bytes, Type: {file.content_type}")
-            
-            # Check file size
+
+            logger.info(
+                f"📄 Received file: {file.filename}, "
+                f"Size: {file_size} bytes, Type: {file.content_type}"
+            )
+
+            # File size checks
             if file_size > 10 * 1024 * 1024:
-                raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB")
-            
+                raise HTTPException(
+                    status_code=413,
+                    detail="File too large. Maximum size is 10MB",
+                )
+
             if file_size < 1024:
-                raise HTTPException(status_code=400, detail="File too small. Please ensure the image is readable")
-            
+                raise HTTPException(
+                    status_code=400,
+                    detail="File too small. Please ensure the image is readable",
+                )
+
             temp_file.write(content)
             temp_file.flush()
-        
+
         logger.info(f"🔄 Processing prescription file: {file.filename}")
-        
-        # Analyze prescription
+
+        # ---- Actual analysis ----
         result = analyzer.analyze_prescription(temp_file_path)
-        
-        if not result.success:
-            logger.warning(f"⚠️ Analysis failed for prescription {result.prescription_id}: {result.error}")
+
+        # If your analyzer uses a dataclass / object, to_json converts it to dict
+        json_result = analyzer.to_json(result) if hasattr(analyzer, "to_json") else {}
+
+        # Build a response dict that matches Go's MLExtractionResult
+        if not getattr(result, "success", False):
+            logger.warning(
+                f"⚠️ Analysis failed for prescription "
+                f"{getattr(result, 'prescription_id', None)}: {getattr(result, 'error', None)}"
+            )
+
             safe_error_data = ensure_safe_response_data({
-                'success': False,
-                'error': result.error,
-                'message': "Failed to analyze prescription. Please ensure the image is clear."
+                "success": False,
+                "prescription_id": getattr(result, "prescription_id", None),
+                "patient": json_result.get("patient", {}) or {},
+                "doctor": json_result.get("doctor", {}) or {},
+                "medicines": json_result.get("medicines", []) or [],
+                "confidence_score": float(json_result.get("confidence_score", 0.0)),
+                "raw_text": json_result.get("raw_text", getattr(result, "raw_text", "") or ""),
+                "error": getattr(result, "error", "Failed to analyze prescription"),
+                "message": "Failed to analyze prescription. Please ensure the image is clear.",
             })
             return AnalysisResponse(**safe_error_data)
-        
-        # Convert to JSON format
-        json_result = analyzer.to_json(result)
-        
-        logger.info(f"✅ Analysis completed successfully for prescription {result.prescription_id}")
-        logger.info(f"   Doctor: {result.doctor.name or 'N/A'}")
-        logger.info(f"   Patient: {result.patient.name or 'N/A'}")
-        logger.info(f"   Medicines: {len(result.medicines)}")
-        logger.info(f"   Confidence: {result.confidence_score:.2%}")
-        
-        # Ensure response data is safe
-        safe_data = ensure_safe_response_data(json_result)
-        
+
+        # Success path
+        logger.info(
+            f"✅ Analysis completed successfully for prescription "
+            f"{getattr(result, 'prescription_id', None)}"
+        )
+        try:
+            logger.info(f"   Doctor: {getattr(result.doctor, 'name', 'N/A')}")
+        except Exception:
+            pass
+        try:
+            logger.info(f"   Patient: {getattr(result.patient, 'name', 'N/A')}")
+        except Exception:
+            pass
+        try:
+            logger.info(f"   Medicines: {len(getattr(result, 'medicines', []) or [])}")
+        except Exception:
+            pass
+        try:
+            logger.info(
+                f"   Confidence: {float(getattr(result, 'confidence_score', 0.0)):.2%}"
+            )
+        except Exception:
+            pass
+
+        # Build the final compatible payload
+        safe_data = ensure_safe_response_data({
+            "success": True,
+            "prescription_id": json_result.get(
+                "prescription_id", getattr(result, "prescription_id", None)
+            ),
+            "patient": json_result.get("patient", {}) or {},
+            "doctor": json_result.get("doctor", {}) or {},
+            "medicines": json_result.get("medicines", []) or [],
+            "confidence_score": float(
+                json_result.get("confidence_score", getattr(result, "confidence_score", 0.0))
+            ),
+            "raw_text": json_result.get("raw_text", getattr(result, "raw_text", "") or ""),
+            "error": None,
+            "message": json_result.get("message", "Analysis completed successfully"),
+        })
+
         try:
             return AnalysisResponse(**safe_data)
         except Exception as validation_error:
             logger.error(f"❌ Validation error: {validation_error}")
             fallback_data = ensure_safe_response_data({
-                'success': result.success,
-                'prescription_id': result.prescription_id,
-                'message': 'Analysis completed but response formatting had issues',
-                'confidence_score': result.confidence_score
+                "success": True,
+                "prescription_id": getattr(result, "prescription_id", None),
+                "patient": safe_data.get("patient", {}),
+                "doctor": safe_data.get("doctor", {}),
+                "medicines": safe_data.get("medicines", []),
+                "confidence_score": float(
+                    getattr(result, "confidence_score", 0.0)
+                ),
+                "raw_text": safe_data.get("raw_text", ""),
+                "error": None,
+                "message": "Analysis completed but response formatting had issues",
             })
             return AnalysisResponse(**fallback_data)
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Error analyzing prescription: {str(e)}", exc_info=True)
         safe_error_data = ensure_safe_response_data({
-            'success': False,
-            'error': str(e),
-            'message': "An unexpected error occurred during analysis."
+            "success": False,
+            "prescription_id": None,
+            "patient": {},
+            "doctor": {},
+            "medicines": [],
+            "confidence_score": 0.0,
+            "raw_text": "",
+            "error": str(e),
+            "message": "An unexpected error occurred during analysis.",
         })
         return AnalysisResponse(**safe_error_data)
     finally:

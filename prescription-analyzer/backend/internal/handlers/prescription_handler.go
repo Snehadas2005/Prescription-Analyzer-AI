@@ -45,8 +45,8 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	// Call the /api/analyze-prescription endpoint
-	req, err := http.NewRequest("POST", h.mlServiceURL+"/api/analyze-prescription", body)
+	// ✅ IMPORTANT CHANGE HERE
+	req, err := http.NewRequest("POST", h.mlServiceURL+"/extract", body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -74,7 +74,6 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to parse ML response: %w. Response: %s", err, string(bodyBytes))
 	}
 
-	// Check if the ML service reported success
 	if !result.Success {
 		return nil, fmt.Errorf("ML service error: %s", result.Error)
 	}
