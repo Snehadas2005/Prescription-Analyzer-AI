@@ -26,20 +26,23 @@ async def health_check():
         "service": "ml-service"
     }
 
-# Original endpoint
 @app.post("/extract", response_model=PrescriptionResponse)
 async def extract_prescription(file: UploadFile = File(...)):
+    """Extract information from prescription image (original endpoint)"""
     return await analyze_prescription_internal(file)
 
-# NEW: Go backend compatible endpoint
 @app.post("/analyze-prescription", response_model=PrescriptionResponse)
 async def analyze_prescription(file: UploadFile = File(...)):
+    """Analyze prescription image (Go backend compatible endpoint)"""
     return await analyze_prescription_internal(file)
 
-# Shared implementation
 async def analyze_prescription_internal(file: UploadFile):
+    """Internal function for both endpoints"""
     try:
+        # Read image
         image_bytes = await file.read()
+        
+        # Extract information
         result = await extraction_service.extract(image_bytes)
         
         return PrescriptionResponse(
