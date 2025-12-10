@@ -3,6 +3,9 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
+import tempfile
+import os
+import uuid
 import re
 import spacy
 from typing import Dict, List, Any
@@ -45,40 +48,66 @@ class ExtractionService:
         }
     
     async def extract(self, image_bytes: bytes) -> Dict[str, Any]:
-        """Main extraction pipeline"""
-        try:
-            # 1. Preprocess image
-            processed_image = self._preprocess_image(image_bytes)
+            """Extract prescription information using the enhanced analyzer"""
             
-            # 2. Extract text using OCR
-            extracted_text = self._extract_text(processed_image)
+            # Save image bytes to temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                temp_file.write(image_bytes)
+                temp_file_path = temp_file.name
             
-            # 3. Extract structured information
-            patient_info = self._extract_patient_info(extracted_text)
-            doctor_info = self._extract_doctor_info(extracted_text)
-            medicines = self._extract_medicines(extracted_text)
-            
-            # 4. Calculate confidence score
-            confidence = self._calculate_confidence(
-                patient_info, doctor_info, medicines
-            )
-            
-            # 5. Generate unique prescription ID
-            prescription_id = self._generate_id()
-            
-            return {
-                "id": prescription_id,
-                "patient": patient_info,
-                "doctor": doctor_info,
-                "medicines": medicines,
-                "confidence": confidence,
-                "raw_text": extracted_text
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Extraction failed: {e}")
-            raise
-    
+            try:
+                # Analyze the prescription
+                result = self.analyzer.analyze_prescription(temp_file_path)
+                
+                if not result.success:
+                    return {
+                        "success": False,
+                        "prescription_id": f"RX-{uuid.uuid4().hex[:8].upper()}",
+                        "patient": {"name": "", "age": "", "gender": ""},
+                        "doctor": {"name": "", "specialization": "", "registration": ""},
+                        "medicines": [],
+                        "confidence_score": 0.0,
+                        "raw_text": "",
+                        "error": result.error,
+                        "message": "Analysis failed"
+                    }
+                
+                # Convert to the expected format with all required fields
+                return {
+                    "success": True,
+                    "prescription_id": result.prescription_id,
+                    "patient": {
+                        "name": result.patient.name or "",
+                        "age": result.patient.age or "",
+                        "gender": result.patient.gender or "",
+                    },
+                    "doctor": {
+                        "name": result.doctor.name or "",
+                        "specialization": result.doctor.specialization or "",
+                        "registration": result.doctor.registration_number or "",
+                    },
+                    "medicines": [
+                        {
+                            "name": med.name or "",
+                            "dosage": med.dosage or "",
+                            "frequency": med.frequency or "",
+                            "timing": med.instructions or "",
+                            "duration": med.duration or "",
+                            "quantity": int(med.quantity) if med.quantity and med.quantity.isdigit() else 1,
+                        }
+                        for med in result.medicines
+                    ],
+                    "confidence_score": float(result.confidence_score),
+                    "raw_text": result.raw_text or "",
+                    "message": "Analysis completed successfully",
+                    "error": ""
+                }
+                
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+
     def _preprocess_image(self, image_bytes: bytes) -> np.ndarray:
         """Preprocess image for better OCR"""
         # Convert bytes to numpy array

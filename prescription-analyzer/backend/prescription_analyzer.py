@@ -471,6 +471,8 @@ class EnhancedPrescriptionAnalyzer:
         
         return self._analyze_with_cohere_api(extracted_text, ocr_confidence)
 
+    # In backend/prescription_analyzer.py, replace the _analyze_with_cohere_api method (around line 284)
+
     def _analyze_with_cohere_api(self, extracted_text: str, ocr_confidence: float) -> Dict:
         """Enhanced Cohere API analysis with updated model"""
         
@@ -524,9 +526,9 @@ class EnhancedPrescriptionAnalyzer:
         """
 
         try:
-            # UPDATED: Use command-r-plus which is still available
+            # FIXED: Use command-r instead of command-r-plus (which was removed)
             response = self.co.chat(
-                model="command-r-plus",  # Changed from "command-r"
+                model="command-r-08-2024", 
                 message="Return ONLY valid JSON. Do not add json blocks, backticks, or any explanation.\n\n" + prompt
             )
 
@@ -580,7 +582,7 @@ class EnhancedPrescriptionAnalyzer:
             logger.error(f"Cohere API error: {e}")
             # Fallback to pattern-based extraction
             return self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
-    
+
     def _validate_and_enhance_extraction(self, data: Dict, doctor_info: Dict, patient_info: Dict) -> Dict:
         """Validate and enhance the extracted data using pattern-based results"""
         

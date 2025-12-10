@@ -68,16 +68,73 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("ML service returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var result MLExtractionResult
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+	// First, unmarshal into a generic map to handle flexible structure
+	var rawResult map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &rawResult); err != nil {
 		return nil, fmt.Errorf("failed to parse ML response: %w. Response: %s", err, string(bodyBytes))
 	}
 
-	if !result.Success {
-		return nil, fmt.Errorf("ML service error: %s", result.Error)
+	// Create MLExtractionResult with safe type conversions
+	result := &MLExtractionResult{
+		Success:         true,
+		PrescriptionID:  getStringValue(rawResult, "prescription_id"),
+		Patient:         getMapValue(rawResult, "patient"),
+		Doctor:          getMapValue(rawResult, "doctor"),
+		Medicines:       getMedicinesArray(rawResult),
+		ConfidenceScore: getFloatValue(rawResult, "confidence_score"),
+		RawText:         getStringValue(rawResult, "raw_text"),
+		Message:         getStringValue(rawResult, "message"),
 	}
 
-	return &result, nil
+	return result, nil
+}
+
+// Helper functions for safe type conversions
+func getStringValue(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getFloatValue(m map[string]interface{}, key string) float64 {
+	if v, ok := m[key]; ok && v != nil {
+		switch val := v.(type) {
+		case float64:
+			return val
+		case float32:
+			return float64(val)
+		case int:
+			return float64(val)
+		}
+	}
+	return 0.0
+}
+
+func getMapValue(m map[string]interface{}, key string) map[string]interface{} {
+	if v, ok := m[key]; ok && v != nil {
+		if mapVal, ok := v.(map[string]interface{}); ok {
+			return mapVal
+		}
+	}
+	return make(map[string]interface{})
+}
+
+func getMedicinesArray(m map[string]interface{}) []map[string]interface{} {
+	if v, ok := m["medicines"]; ok && v != nil {
+		if arr, ok := v.([]interface{}); ok {
+			result := make([]map[string]interface{}, 0, len(arr))
+			for _, item := range arr {
+				if medMap, ok := item.(map[string]interface{}); ok {
+					result = append(result, medMap)
+				}
+			}
+			return result
+		}
+	}
+	return []map[string]interface{}{}
 }
 
 // Upload handles prescription upload
