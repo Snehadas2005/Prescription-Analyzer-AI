@@ -22,8 +22,8 @@ const EnhancedPrescriptionAnalyzer = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [error, setError] = useState(null);
 
-  // API base URL
- const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080/api/v1";
+  // API base URL - CRITICAL: Make sure this matches your backend
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080/api/v1";
 
   const handleFileSelect = useCallback((event) => {
     const file = event.target.files[0];
@@ -49,25 +49,50 @@ const EnhancedPrescriptionAnalyzer = () => {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
+      console.log("📤 Uploading to:", `${API_BASE_URL}/upload`);
+      
       const response = await fetch(`${API_BASE_URL}/upload`, {
         method: "POST",
         body: formData,
       });
 
+      console.log("📥 Response status:", response.status);
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
+      console.log("📊 Full response:", JSON.stringify(result, null, 2));
+      
+      // CRITICAL: Check both formats (backend might wrap in "data")
+      const actualData = result.data || result;
+      
+      console.log("✅ Processed data:", {
+        success: result.success,
+        prescriptionId: actualData.prescription_id,
+        patientName: actualData.patient?.name,
+        doctorName: actualData.doctor?.name,
+        medicinesCount: actualData.medicines?.length || 0,
+        confidence: actualData.confidence || actualData.confidence_score
+      });
       
       if (result.success) {
-        setAnalysisResult(result);
+        // Store the ACTUAL data structure
+        setAnalysisResult(actualData);
         setActiveTab("results");
+        
+        console.log("🎉 Analysis successful!");
+        console.log("   Patient:", actualData.patient?.name);
+        console.log("   Doctor:", actualData.doctor?.name);
+        console.log("   Medicines:", actualData.medicines?.length);
+        console.log("   Confidence:", actualData.confidence || actualData.confidence_score);
       } else {
         setError(result.error || "Failed to analyze prescription");
+        console.error("❌ Analysis failed:", result.error);
       }
     } catch (error) {
-      console.error("Error analyzing prescription:", error);
+      console.error("❌ Error during analysis:", error);
       setError(`Failed to connect to server: ${error.message}`);
     } finally {
       setIsAnalyzing(false);
@@ -81,21 +106,27 @@ const EnhancedPrescriptionAnalyzer = () => {
     setError(null);
   };
 
-  const ConfidenceBar = ({ score }) => (
-    <div className="confidence-bar">
-      <div
-        className={`confidence-fill ${
-          score >= 0.8 ? "bg-gradient-to-r from-green-500 to-green-600" :
-          score >= 0.6 ? "bg-gradient-to-r from-yellow-500 to-yellow-600" :
-          "bg-gradient-to-r from-red-500 to-red-600"
-        }`}
-        style={{ width: `${score * 100}%` }}
-      />
-      <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
-        {(score * 100).toFixed(0)}%
+  // Helper to safely get confidence score
+  const getConfidence = (result) => {
+    return result?.confidence || result?.confidence_score || 0;
+  };
+
+  const ConfidenceBar = ({ score }) => {
+    const percentage = Math.round(score * 100);
+    const color = score >= 0.8 ? "green" : score >= 0.6 ? "yellow" : "red";
+    
+    return (
+      <div className="confidence-bar">
+        <div
+          className={`confidence-fill bg-gradient-to-r from-${color}-500 to-${color}-600`}
+          style={{ width: `${percentage}%` }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
+          {percentage}%
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const TabButton = ({ tab, isActive, isDisabled, children }) => (
     <button
@@ -162,7 +193,7 @@ const EnhancedPrescriptionAnalyzer = () => {
             <TabButton 
               tab="results" 
               isActive={activeTab === "results"}
-              isDisabled={!analysisResult?.success}
+              isDisabled={!analysisResult}
             >
               Results
             </TabButton>
@@ -257,12 +288,8 @@ const EnhancedPrescriptionAnalyzer = () => {
                     <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
                       Our AI is processing your prescription image...
                     </p>
-                    <div className="confidence-bar">
-                      <div className="confidence-fill bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500" 
-                           style={{width: "60%", animation: "pulse 2s infinite"}} />
-                    </div>
                   </div>
-                ) : analysisResult?.success ? (
+                ) : analysisResult ? (
                   <div>
                     <CheckCircle size={64} color="#10b981" style={{ margin: '0 auto 1rem' }} />
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#1f2937', marginBottom: '0.5rem' }}>
@@ -289,8 +316,16 @@ const EnhancedPrescriptionAnalyzer = () => {
         )}
 
         {/* Results Section */}
-        {activeTab === "results" && analysisResult?.success && (
+        {activeTab === "results" && analysisResult && (
           <div className="grid" style={{ gap: '1.5rem' }}>
+            {/* Debug Info - Remove this after testing */}
+            <div className="card" style={{ background: '#f0f9ff', border: '2px solid #0ea5e9' }}>
+              <h3 style={{ color: '#0369a1', marginBottom: '1rem' }}>🔍 Debug Info (Remove after testing)</h3>
+              <pre style={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: '200px' }}>
+                {JSON.stringify(analysisResult, null, 2)}
+              </pre>
+            </div>
+
             {/* Confidence Score */}
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -301,13 +336,10 @@ const EnhancedPrescriptionAnalyzer = () => {
                   </h3>
                 </div>
                 <span style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2563eb' }}>
-                  {Math.round((analysisResult.confidence_score || 0) * 100)}%
+                  {Math.round(getConfidence(analysisResult) * 100)}%
                 </span>
               </div>
-              <ConfidenceBar score={analysisResult.confidence_score || 0} />
-              <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                Higher confidence indicates better text extraction and information accuracy
-              </p>
+              <ConfidenceBar score={getConfidence(analysisResult)} />
             </div>
 
             {/* Patient and Doctor Info */}
@@ -323,19 +355,19 @@ const EnhancedPrescriptionAnalyzer = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6b7280' }}>Name:</span>
                     <span style={{ fontWeight: '500' }}>
-                      {analysisResult.patient?.name || analysisResult.patient_name || "Not specified"}
+                      {analysisResult.patient?.name || "Not specified"}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6b7280' }}>Age:</span>
                     <span style={{ fontWeight: '500' }}>
-                      {analysisResult.patient?.age || analysisResult.patient_age || "Not specified"}
+                      {analysisResult.patient?.age || "Not specified"}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6b7280' }}>Gender:</span>
                     <span style={{ fontWeight: '500' }}>
-                      {analysisResult.patient?.gender || analysisResult.patient_gender || "Not specified"}
+                      {analysisResult.patient?.gender || "Not specified"}
                     </span>
                   </div>
                 </div>
@@ -352,7 +384,7 @@ const EnhancedPrescriptionAnalyzer = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6b7280' }}>Name:</span>
                     <span style={{ fontWeight: '500' }}>
-                      {analysisResult.doctor?.name || analysisResult.doctor_name || "Not specified"}
+                      {analysisResult.doctor?.name || "Not specified"}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -364,38 +396,12 @@ const EnhancedPrescriptionAnalyzer = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6b7280' }}>License:</span>
                     <span style={{ fontWeight: '500' }}>
-                      {analysisResult.doctor?.registration_number || analysisResult.doctor_license || "Not specified"}
+                      {analysisResult.doctor?.registration || analysisResult.doctor?.registration_number || "Not specified"}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Diagnosis */}
-            {analysisResult.diagnosis && analysisResult.diagnosis.length > 0 && (
-              <div className="card">
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-                  <Heart size={24} color="#ef4444" style={{ marginRight: '0.5rem' }} />
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
-                    Diagnosed Conditions
-                  </h3>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {analysisResult.diagnosis.map((condition, index) => (
-                    <span
-                      key={index}
-                      className="status-badge"
-                      style={{ 
-                        background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
-                        color: '#991b1b'
-                      }}
-                    >
-                      {condition}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Medicines */}
             <div className="card">
@@ -417,12 +423,12 @@ const EnhancedPrescriptionAnalyzer = () => {
                     <div key={index} className="medicine-card">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                         <h4 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#1f2937' }}>
-                          {medicine.name}
+                          {medicine.name || `Medicine ${index + 1}`}
                         </h4>
                         <div className={`status-badge ${
-                          medicine.available ? 'status-available' : 'status-unavailable'
+                          medicine.available !== false ? 'status-available' : 'status-unavailable'
                         }`}>
-                          {medicine.available ? (
+                          {medicine.available !== false ? (
                             <>
                               <CheckCircle size={16} style={{ marginRight: '0.25rem' }} />
                               Available
@@ -451,10 +457,12 @@ const EnhancedPrescriptionAnalyzer = () => {
                         </div>
                       </div>
                       
-                      {medicine.instructions && (
+                      {(medicine.instructions || medicine.timing) && (
                         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #f3f4f6', marginTop: '0.75rem' }}>
                           <span style={{ color: '#6b7280' }}>Instructions:</span>
-                          <p style={{ color: '#1f2937', marginTop: '0.25rem' }}>{medicine.instructions}</p>
+                          <p style={{ color: '#1f2937', marginTop: '0.25rem' }}>
+                            {medicine.instructions || medicine.timing}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -476,27 +484,6 @@ const EnhancedPrescriptionAnalyzer = () => {
                 <Upload size={20} style={{ marginRight: '0.5rem' }} />
                 Analyze New Prescription
               </button>
-            </div>
-
-            {/* Disclaimer */}
-            <div className="card" style={{ 
-              background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.5), rgba(253, 230, 138, 0.3))',
-              border: '2px solid rgba(251, 191, 36, 0.3)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
-                <AlertTriangle size={24} color="#f59e0b" style={{ flexShrink: 0, marginTop: '0.25rem' }} />
-                <div>
-                  <h4 style={{ fontWeight: '600', color: '#92400e', marginBottom: '0.5rem' }}>
-                    Medical Disclaimer
-                  </h4>
-                  <p style={{ color: '#78350f', fontSize: '0.875rem', lineHeight: '1.5' }}>
-                    This is an AI-powered analysis tool for informational purposes only. 
-                    Always verify the extracted information with the original prescription and 
-                    consult with qualified healthcare professionals before taking any medication. 
-                    Do not rely solely on this analysis for medical decisions.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         )}

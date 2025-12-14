@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"time"
@@ -64,77 +65,37 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
+	// Log the response for debugging
+	log.Printf("ML Service Response Status: %d", resp.StatusCode)
+	log.Printf("ML Service Response Body: %s", string(bodyBytes))
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ML service returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// First, unmarshal into a generic map to handle flexible structure
-	var rawResult map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawResult); err != nil {
+	var result MLExtractionResult
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse ML response: %w. Response: %s", err, string(bodyBytes))
 	}
 
-	// Create MLExtractionResult with safe type conversions
-	result := &MLExtractionResult{
-		Success:         true,
-		PrescriptionID:  getStringValue(rawResult, "prescription_id"),
-		Patient:         getMapValue(rawResult, "patient"),
-		Doctor:          getMapValue(rawResult, "doctor"),
-		Medicines:       getMedicinesArray(rawResult),
-		ConfidenceScore: getFloatValue(rawResult, "confidence_score"),
-		RawText:         getStringValue(rawResult, "raw_text"),
-		Message:         getStringValue(rawResult, "message"),
+	// Validate the result
+	if !result.Success {
+		log.Printf("ML service analysis failed: %s", result.Error)
+		return &result, nil
 	}
 
-	return result, nil
-}
-
-// Helper functions for safe type conversions
-func getStringValue(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
+	// Ensure confidence score is valid
+	if result.ConfidenceScore < 0 || result.ConfidenceScore > 1 {
+		log.Printf("Invalid confidence score: %f, setting to 0", result.ConfidenceScore)
+		result.ConfidenceScore = 0
 	}
-	return ""
-}
 
-func getFloatValue(m map[string]interface{}, key string) float64 {
-	if v, ok := m[key]; ok && v != nil {
-		switch val := v.(type) {
-		case float64:
-			return val
-		case float32:
-			return float64(val)
-		case int:
-			return float64(val)
-		}
-	}
-	return 0.0
-}
+	log.Printf("✅ ML Analysis successful - Confidence: %.2f%%", result.ConfidenceScore*100)
+	log.Printf("   Patient: %v", result.Patient["name"])
+	log.Printf("   Doctor: %v", result.Doctor["name"])
+	log.Printf("   Medicines: %d", len(result.Medicines))
 
-func getMapValue(m map[string]interface{}, key string) map[string]interface{} {
-	if v, ok := m[key]; ok && v != nil {
-		if mapVal, ok := v.(map[string]interface{}); ok {
-			return mapVal
-		}
-	}
-	return make(map[string]interface{})
-}
-
-func getMedicinesArray(m map[string]interface{}) []map[string]interface{} {
-	if v, ok := m["medicines"]; ok && v != nil {
-		if arr, ok := v.([]interface{}); ok {
-			result := make([]map[string]interface{}, 0, len(arr))
-			for _, item := range arr {
-				if medMap, ok := item.(map[string]interface{}); ok {
-					result = append(result, medMap)
-				}
-			}
-			return result
-		}
-	}
-	return []map[string]interface{}{}
+	return &result, nil
 }
 
 // Upload handles prescription upload
@@ -163,16 +124,32 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	log.Printf("📄 Uploading file: %s, Size: %d bytes", file.Filename, len(fileBytes))
+
 	imageURL, err := h.storageService.UploadImage(fileBytes, file.Filename)
 	if err != nil {
+		log.Printf("❌ Failed to upload image: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
 		return
 	}
 
+	log.Printf("📤 Calling ML service...")
 	extractionResult, err := h.callMLService(fileBytes)
 	if err != nil {
+		log.Printf("❌ ML service error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to extract information: %v", err),
+		})
+		return
+	}
+
+	if !extractionResult.Success {
+		log.Printf("⚠️ ML service returned unsuccessful result: %s", extractionResult.Error)
+		// Return error but with 200 status so frontend can handle it
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"error":   extractionResult.Error,
+			"message": extractionResult.Message,
 		})
 		return
 	}
@@ -190,14 +167,22 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 		UpdatedAt:      time.Now(),
 	}
 
+	log.Printf("💾 Saving prescription to database...")
 	collection := h.db.Collection("prescriptions")
 	result, err := collection.InsertOne(c.Request.Context(), prescription)
 	if err != nil {
+		log.Printf("❌ Failed to save prescription: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save prescription"})
 		return
 	}
 
 	prescription.ID = result.InsertedID.(primitive.ObjectID)
+
+	log.Printf("✅ Prescription saved successfully: %s", prescription.PrescriptionID)
+	log.Printf("   Confidence: %.2f%%", prescription.Confidence*100)
+	log.Printf("   Patient: %s", prescription.Patient.Name)
+	log.Printf("   Doctor: %s", prescription.Doctor.Name)
+	log.Printf("   Medicines: %d", len(prescription.Medicines))
 
 	go h.triggerLearningPipeline(prescription)
 
@@ -210,37 +195,38 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 // Helper functions
 func convertPatientInfo(data map[string]interface{}) PatientInfo {
 	return PatientInfo{
-		Name:   getString(data, "name"),
-		Age:    getString(data, "age"),
-		Gender: getString(data, "gender"),
+		Name:   getStringFromMap(data, "name"),
+		Age:    getStringFromMap(data, "age"),
+		Gender: getStringFromMap(data, "gender"),
 	}
 }
 
 func convertDoctorInfo(data map[string]interface{}) DoctorInfo {
 	return DoctorInfo{
-		Name:           getString(data, "name"),
-		Specialization: getString(data, "specialization"),
-		Registration:   getString(data, "registration_number"),
+		Name:           getStringFromMap(data, "name"),
+		Specialization: getStringFromMap(data, "specialization"),
+		Registration:   getStringFromMap(data, "registration_number"),
 	}
 }
 
 func convertMedicines(data []map[string]interface{}) []Medicine {
 	medicines := make([]Medicine, 0, len(data))
 	for _, m := range data {
-		medicines = append(medicines, Medicine{
-			Name:      getString(m, "name"),
-			Dosage:    getString(m, "dosage"),
-			Frequency: getString(m, "frequency"),
-			Timing:    getString(m, "timing"),
-			Duration:  getString(m, "duration"),
-			Quantity:  getInt(m, "quantity"),
-		})
+		medicine := Medicine{
+			Name:      getStringFromMap(m, "name"),
+			Dosage:    getStringFromMap(m, "dosage"),
+			Frequency: getStringFromMap(m, "frequency"),
+			Timing:    getStringFromMap(m, "timing"),
+			Duration:  getStringFromMap(m, "duration"),
+			Quantity:  getIntFromMap(m, "quantity"),
+		}
+		medicines = append(medicines, medicine)
 	}
 	return medicines
 }
 
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok && v != nil {
 		if s, ok := v.(string); ok {
 			return s
 		}
@@ -248,16 +234,21 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getInt(m map[string]interface{}, key string) int {
-	if v, ok := m[key]; ok {
+func getIntFromMap(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok && v != nil {
 		switch val := v.(type) {
 		case int:
 			return val
 		case float64:
 			return int(val)
+		case string:
+			// Try to parse string to int
+			var num int
+			fmt.Sscanf(val, "%d", &num)
+			return num
 		}
 	}
-	return 0
+	return 1 // Default quantity
 }
 
 func isValidImageType(filename string) bool {
@@ -302,7 +293,6 @@ func (h *PrescriptionHandler) Get(c *gin.Context) {
 
 // GetHistory retrieves prescription history
 func (h *PrescriptionHandler) GetHistory(c *gin.Context) {
-	// TODO: Add pagination support
 	collection := h.db.Collection("prescriptions")
 
 	cursor, err := collection.Find(c.Request.Context(), map[string]interface{}{})
