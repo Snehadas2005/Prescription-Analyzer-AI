@@ -1,11 +1,13 @@
 # Web & API
+streamlit==1.28.1
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
 aiofiles==23.2.1
 python-dotenv==1.0.0
+python-jose==3.3.0
 
-# Core ML/OCR
+# Core ML/OCR - Traditional
 opencv-python==4.8.1.78
 numpy==1.26.4
 Pillow==10.3.0
@@ -13,18 +15,76 @@ easyocr==1.7.0
 pytesseract==0.3.10
 scikit-image==0.25.2
 
+# PyTorch - CPU version (faster installation, no CUDA required)
+# For GPU: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+torch==2.1.0
+torchvision==0.16.0
+
+# Transformers for TrOCR
+transformers==4.35.2
+sentencepiece==0.1.99
+accelerate==0.25.0
+
+# Additional transformer dependencies
+tokenizers==0.15.0
+huggingface-hub==0.19.4
+safetensors==0.4.1
+
+# ============================================================================
+
 # NLP
 spacy==3.7.2
 fuzzywuzzy==0.18.0
 python-Levenshtein==0.23.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
-# AI
+# LangChain & AI
+langchain==0.0.292
+langchain-openai==0.0.2
+langchain-core==0.1.53
+langsmith==0.0.70
 cohere==4.32
 
 # Data & Utils
 pandas==2.0.3
 pydantic==2.5.0
 python-dateutil==2.8.2
+hashlib-compat
+pickle5
 
-# Database
+# Database (if using MongoDB)
 pymongo==4.6.0
+
+# ============================================================================
+# INSTALLATION NOTES
+# ============================================================================
+#
+# Quick Install:
+#   pip install -r requirements.txt
+#
+# For GPU Support (if you have CUDA):
+#   pip uninstall torch torchvision
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#
+# Download TrOCR Model (one-time, ~300MB):
+#   python -c "from transformers import TrOCRProcessor, VisionEncoderDecoderModel; \
+#              TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten'); \
+#              VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')"
+#
+# Alternative TrOCR Models:
+#   - microsoft/trocr-small-handwritten (faster, smaller, less accurate)
+#   - microsoft/trocr-large-handwritten (slower, larger, more accurate)
+#   - microsoft/trocr-base-printed (for printed text only)
+#
+# Memory Requirements:
+#   - Minimum: 4GB RAM (with quantization)
+#   - Recommended: 8GB RAM
+#   - GPU: Optional (speeds up inference 3-5x)
+#
+# Disk Space:
+#   - Base requirements: ~2GB
+#   - TrOCR model: ~300MB
+#   - Cache: ~500MB
+#   - Total: ~3GB
+#
+# ============================================================================

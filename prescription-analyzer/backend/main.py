@@ -44,16 +44,19 @@ analyzer: Optional[EnhancedPrescriptionAnalyzer] = None
 async def startup_event():
     global analyzer
     try:
-        logger.info("Initializing analyzer...")
+        logger.info("Initializing analyzer with TrOCR support...")
+        
         analyzer = EnhancedPrescriptionAnalyzer(
             cohere_api_key=os.getenv('COHERE_API_KEY'),
+            use_gpu=False,  # Set True if you have GPU
             force_api=False
         )
-        logger.info("✅ Analyzer ready")
+        
+        logger.info("✅ Analyzer with hybrid OCR ready")
     except Exception as e:
         logger.error(f"❌ Init failed: {e}")
         raise
-
+    
 @app.get("/")
 async def root():
     return {

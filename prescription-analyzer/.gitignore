@@ -26,6 +26,7 @@ __pycache__/
 # Virtual environments
 venv/
 venv312/
+venv_trocr/
 env/
 ENV/
 .venv
