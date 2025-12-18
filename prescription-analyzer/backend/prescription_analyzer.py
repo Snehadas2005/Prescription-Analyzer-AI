@@ -821,27 +821,40 @@ class EnhancedPrescriptionAnalyzer:
                 ocr_confidence, len(medicines), patient, doctor
             )
             
-            logger.info(f"Enhanced analysis completed successfully for {prescription_id}")
-            logger.info(f"Doctor: {doctor.name}, Patient: {patient.name}, Medicines: {len(medicines)}")
+            logger.info(f"  Doctor: {doctor.name}")
+            logger.info(f"  Patient: {patient.name}")
+            logger.info(f"  Medicines: {len(medicines)}")
             
+            # Create successful result
             return AnalysisResult(
                 prescription_id=prescription_id,
                 patient=patient,
                 doctor=doctor,
                 medicines=medicines,
-                diagnosis=[cohere_result.get('diagnosis', '')] if cohere_result.get('diagnosis') else [],
-                confidence_score=confidence_score,
-                raw_text=extracted_text,
-                success=True
+                diagnosis=[],  # Can be enhanced later with diagnosis extraction
+                confidence_score=confidence,
+                raw_text=cleaned_text,
+                success=True,
+                error="",
+                ocr_methods_used=methods_used
             )
             
         except Exception as e:
-            logger.error(f"Error in enhanced analyze_prescription: {e}")
+            logger.error(f"❌ Error in analyze_prescription: {e}")
+            import traceback
+            traceback.print_exc()
+            
             return AnalysisResult(
                 prescription_id=f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                patient=Patient(), doctor=Doctor(), medicines=[],
-                diagnosis=[], confidence_score=0.0, raw_text="",
-                success=False, error=str(e)
+                patient=Patient(), 
+                doctor=Doctor(),
+                medicines=[], 
+                diagnosis=[],
+                confidence_score=0.0, 
+                raw_text="",
+                success=False, 
+                error=str(e),
+                ocr_methods_used=[]
             )
 
     def _calculate_confidence(self, ocr_confidence: float, medicines_count: int, 
@@ -950,3 +963,295 @@ class EnhancedPrescriptionAnalyzer:
             logger.info(f"Added {len(new_medicines)} new medicines to database")
         
         logger.info("Training completed successfully")
+    
+    def analyze_prescription(self, image_path: str) -> AnalysisResult:
+        """Main analysis method with self-learning support"""
+        try:
+            prescription_id = f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8]}"
+            
+            logger.info(f"Starting analysis for {prescription_id}")
+            
+            # Preprocess
+            processed_images = self.preprocess_image(image_path)
+            if not processed_images:
+                return AnalysisResult(
+                    prescription_id=prescription_id,
+                    patient=Patient(), doctor=Doctor(),
+                    medicines=[], diagnosis=[],
+                    confidence_score=0.0, raw_text="",
+                    success=False, error="Preprocessing failed",
+                    ocr_methods_used=[]
+                )
+            
+            # Extract text with hybrid OCR
+            extracted_text, ocr_confidence, methods_used = self.extract_text(processed_images)
+            
+            if not extracted_text.strip():
+                return AnalysisResult(
+                    prescription_id=prescription_id,
+                    patient=Patient(), doctor=Doctor(),
+                    medicines=[], diagnosis=[],
+                    confidence_score=0.0, raw_text="",
+                    success=False, error="No text extracted",
+                    ocr_methods_used=methods_used
+                )
+            
+            # Clean text
+            cleaned_text = self._clean_text(extracted_text)
+            
+            # Extract info
+            doctor_info, patient_info = self.extract_doctor_patient_info(cleaned_text)
+            
+            # Create result
+            patient = Patient(
+                name=patient_info.get('name', ''),
+                age=patient_info.get('age', ''),
+                gender=patient_info.get('gender', '')
+            )
+            
+            doctor = Doctor(
+                name=doctor_info.get('name', ''),
+                specialization=doctor_info.get('specialization', ''),
+                registration_number=doctor_info.get('registration_number', '')
+            )
+            
+            # Extract medicines
+            medicines = self._extract_medicines_simple(cleaned_text)
+            
+            # Calculate confidence
+            confidence = self._calculate_confidence(ocr_confidence, len(medicines), patient, doctor)
+            
+            logger.info(f"✓ Analysis complete: {confidence:.2%} confidence")
+            logger.info(f"  OCR methods: {methods_used}")
+            logger.info(f"  Doctor: {doctor.name}")
+            logger.info(f"  Patient: {patient.name}")
+            logger.info(f"  Medicines: {len(medicines)}")
+            
+            # Create successful result
+            return AnalysisResult(
+                prescription_id=prescription_id,
+                patient=patient,
+                doctor=doctor,
+                medicines=medicines,
+                diagnosis=[],  # Can be enhanced later with diagnosis extraction
+                confidence_score=confidence,
+                raw_text=cleaned_text,
+                success=True,
+                error="",
+                ocr_methods_used=methods_used
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error in analyze_prescription: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            return AnalysisResult(
+                prescription_id=f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                patient=Patient(), 
+                doctor=Doctor(),
+                medicines=[], 
+                diagnosis=[],
+                confidence_score=0.0, 
+                raw_text="",
+                success=False, 
+                error=str(e),
+                ocr_methods_used=[]
+            )
+
+
+    def _extract_medicines_simple(self, text: str) -> List[Medicine]:
+        """Extract medicines using simple pattern matching"""
+        medicines = []
+        lines = text.split('\n')
+        
+        # Common medicine name patterns
+        medicine_keywords = ['tab', 'cap', 'syp', 'inj', 'tablet', 'capsule', 'syrup', 'injection']
+        
+        for line in lines:
+            line = line.strip()
+            if len(line) < 3:
+                continue
+            
+            # Skip lines that are clearly not medicines
+            line_lower = line.lower()
+            if any(keyword in line_lower for keyword in ['patient', 'doctor', 'date', 'age', 'gender', 'diagnosis']):
+                continue
+            
+            # Pattern 1: Medicine with dosage (e.g., "Paracetamol 500mg")
+            medicine_match = re.search(
+                r'([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+\s*(?:mg|ml|gm|g|mcg))',
+                line,
+                re.IGNORECASE
+            )
+            
+            if medicine_match:
+                name = medicine_match.group(1).strip()
+                dosage = medicine_match.group(2).strip()
+                
+                # Extract frequency if present
+                frequency = self._extract_frequency(line)
+                duration = self._extract_duration(line)
+                instructions = self._extract_instructions(line)
+                
+                # Skip if name is too short or common word
+                if len(name) < 3 or name.lower() in ['tab', 'cap', 'syp', 'the', 'and', 'for']:
+                    continue
+                
+                medicine = Medicine(
+                    name=name,
+                    dosage=dosage,
+                    quantity="1",
+                    frequency=frequency,
+                    duration=duration,
+                    instructions=instructions,
+                    available=self._check_availability(name)
+                )
+                medicines.append(medicine)
+                continue
+            
+            # Pattern 2: Medicine with Tab/Cap prefix (e.g., "Tab. Amoxicillin")
+            tab_match = re.search(
+                r'(Tab\.?|Cap\.?|Syp\.?|Inj\.?)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)',
+                line,
+                re.IGNORECASE
+            )
+            
+            if tab_match:
+                name = tab_match.group(2).strip()
+                
+                # Try to find dosage nearby
+                dosage_match = re.search(r'(\d+\s*(?:mg|ml|gm|g|mcg))', line, re.IGNORECASE)
+                dosage = dosage_match.group(1) if dosage_match else "As prescribed"
+                
+                frequency = self._extract_frequency(line)
+                duration = self._extract_duration(line)
+                instructions = self._extract_instructions(line)
+                
+                medicine = Medicine(
+                    name=name,
+                    dosage=dosage,
+                    quantity="1",
+                    frequency=frequency,
+                    duration=duration,
+                    instructions=instructions,
+                    available=self._check_availability(name)
+                )
+                medicines.append(medicine)
+                continue
+            
+            # Pattern 3: Line contains medicine keyword and potential medicine name
+            if any(keyword in line_lower for keyword in medicine_keywords):
+                # Extract potential medicine name (capitalized word)
+                name_match = re.search(r'\b([A-Z][a-zA-Z]{3,}(?:\s+[A-Z][a-zA-Z]+)?)\b', line)
+                
+                if name_match:
+                    name = name_match.group(1).strip()
+                    
+                    dosage_match = re.search(r'(\d+\s*(?:mg|ml|gm|g|mcg))', line, re.IGNORECASE)
+                    dosage = dosage_match.group(1) if dosage_match else "As prescribed"
+                    
+                    frequency = self._extract_frequency(line)
+                    duration = self._extract_duration(line)
+                    instructions = self._extract_instructions(line)
+                    
+                    medicine = Medicine(
+                        name=name,
+                        dosage=dosage,
+                        quantity="1",
+                        frequency=frequency,
+                        duration=duration,
+                        instructions=instructions,
+                        available=self._check_availability(name)
+                    )
+                    medicines.append(medicine)
+        
+        # Remove duplicates (same name)
+        unique_medicines = []
+        seen_names = set()
+        
+        for med in medicines:
+            name_lower = med.name.lower()
+            if name_lower not in seen_names:
+                seen_names.add(name_lower)
+                unique_medicines.append(med)
+        
+        return unique_medicines
+
+
+    def _extract_frequency(self, text: str) -> str:
+        """Extract medication frequency from text"""
+        text_lower = text.lower()
+        
+        # Check for common frequency patterns
+        frequency_patterns = {
+            r'\b(once\s+daily|od|qd|1\s*-\s*0\s*-\s*0)\b': 'Once daily',
+            r'\b(twice\s+daily|bd|bid|2\s*times|1\s*-\s*0\s*-\s*1)\b': 'Twice daily',
+            r'\b(thrice\s+daily|tid|3\s*times|1\s*-\s*1\s*-\s*1)\b': 'Three times daily',
+            r'\b(four\s+times|qid|1\s*-\s*1\s*-\s*1\s*-\s*1)\b': 'Four times daily',
+            r'\b(every\s+\d+\s+hours?|q\d+h)\b': text_lower,
+            r'\b(as\s+needed|sos|prn)\b': 'As needed',
+            r'\b(at\s+bedtime|hs|qhs|0\s*-\s*0\s*-\s*1)\b': 'At bedtime',
+            r'\b(morning|0\s*-\s*0\s*-\s*0)\b': 'Morning only',
+        }
+        
+        for pattern, frequency in frequency_patterns.items():
+            if re.search(pattern, text_lower):
+                return frequency if isinstance(frequency, str) and frequency != text_lower else re.search(pattern, text_lower).group(0)
+        
+        return "As directed"
+
+
+    def _extract_duration(self, text: str) -> str:
+        """Extract medication duration from text"""
+        duration_patterns = [
+            r'(\d+\s*(?:day|days|d))',
+            r'(\d+\s*(?:week|weeks|wk|wks))',
+            r'(\d+\s*(?:month|months|mo|mos))',
+            r'(for\s+\d+\s+\w+)',
+        ]
+        
+        for pattern in duration_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return "As prescribed"
+
+
+    def _extract_instructions(self, text: str) -> str:
+        """Extract medication instructions from text"""
+        text_lower = text.lower()
+        
+        instructions = []
+        
+        # Meal timing
+        if re.search(r'\b(before\s+(?:food|meal|eating))\b', text_lower):
+            instructions.append("Before meals")
+        elif re.search(r'\b(after\s+(?:food|meal|eating))\b', text_lower):
+            instructions.append("After meals")
+        elif re.search(r'\b(with\s+(?:food|meal))\b', text_lower):
+            instructions.append("With meals")
+        
+        # Special instructions
+        if re.search(r'\b(empty\s+stomach)\b', text_lower):
+            instructions.append("On empty stomach")
+        
+        if re.search(r'\b(with\s+water)\b', text_lower):
+            instructions.append("With water")
+        
+        if re.search(r'\b(do\s+not\s+crush)\b', text_lower):
+            instructions.append("Do not crush")
+        
+        # Expand abbreviations
+        abbr_map = {
+            'ac': 'before meals',
+            'pc': 'after meals',
+            'hs': 'at bedtime',
+        }
+        
+        for abbr, full in abbr_map.items():
+            if re.search(rf'\b{abbr}\b', text_lower):
+                instructions.append(full.capitalize())
+        
+        return ", ".join(instructions) if instructions else ""

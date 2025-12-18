@@ -217,3 +217,23 @@ results/
 # Cache
 .cache/
 *.cache
+
+# TrOCR models and cache
+.cache/
+*.cache
+backend/.cache/
+backend/models/
+
+# Environment files
+.env
+.env.local
+.env.production
+backend/.env
+backend/integration/keys.py
+
+# Model files
+*.pth
+*.pt
+*.onnx
+*.h5
+*.hdf5
