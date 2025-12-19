@@ -31,7 +31,7 @@ class ExtractionService:
         # Initialize transformer model for medical NER
         self.medical_ner = pipeline(
             "ner",
-            model="clinical-ai/Clinical-Bert-NER",
+            model="d4data/biomedical-ner-all",
             aggregation_strategy="simple"
         )
         
