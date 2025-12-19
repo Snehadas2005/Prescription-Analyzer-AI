@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict
 import uuid
 import tempfile
+from prescription_analyzer import EnhancedPrescriptionAnalyzer
 
 # Add the backend directory to Python path
 backend_path = Path(__file__).parent.parent.parent.parent / "backend"
