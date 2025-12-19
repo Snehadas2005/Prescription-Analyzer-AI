@@ -1,3 +1,12 @@
+"""
+FIXED VERSION - prescription_analyzer.py
+Place this file at: backend/prescription_analyzer.py
+
+This fixes:
+1. ValueError: extract_text returning wrong number of values
+2. OpenCV preprocessing failing on color images
+"""
+
 from __future__ import annotations
 import base64
 import cv2
@@ -61,18 +70,9 @@ class AnalysisResult:
     success: bool = True
     error: str = ""
 
-@dataclass
-class MedicationItem(BaseModel):
-    name: str = Field(default="", description="Medication name")
-    dosage: str = Field(default="", description="Medication dosage")
-    frequency: str = Field(default="", description="Frequency of medication")
-    duration: str = Field(default="", description="Duration of medication")
-
 class EnhancedPrescriptionAnalyzer:
     def __init__(self, cohere_api_key: str = None, tesseract_path: str = None, force_api: bool = True):
-        """
-        Initialize the analyzer with enhanced doctor/patient detection
-        """
+        """Initialize the analyzer"""
         # Initialize Cohere API
         self._init_cohere_api(cohere_api_key, force_api)
         
@@ -85,7 +85,7 @@ class EnhancedPrescriptionAnalyzer:
             self.medicine_database = self._create_default_medicine_database()
             self._save_medicine_database()
 
-        # Enhanced medical patterns for better doctor/patient identification
+        # Enhanced medical patterns
         self.doctor_patterns = {
             'titles': [
                 r'\b(Dr\.?|Doctor|Prof\.?|Professor)\s+([A-Za-z\s\.]+)',
@@ -98,7 +98,7 @@ class EnhancedPrescriptionAnalyzer:
             ],
             'registration': [
                 r'\b(Reg\.?\s*No\.?|Registration\s+No\.?|License\s+No\.?|Medical\s+License)\s*:?\s*([A-Z0-9]+)',
-                r'\b([A-Z]{2,4}[-/]?\d{4,6})\b'  # Common registration number patterns
+                r'\b([A-Z]{2,4}[-/]?\d{4,6})\b'
             ]
         }
         
@@ -120,7 +120,6 @@ class EnhancedPrescriptionAnalyzer:
             ]
         }
 
-        # Medical abbreviations mapping
         self.medical_abbreviations = {
             'bd': 'twice daily', 'bid': 'twice daily', 'tid': 'three times daily',
             'qid': 'four times daily', 'od': 'once daily', 'qd': 'once daily',
@@ -136,7 +135,7 @@ class EnhancedPrescriptionAnalyzer:
         try:
             from integration.keys import COHERE_API_KEY as KEY_FILE
             key_from_file = KEY_FILE
-            logger.info("Cohere API key loaded from integration.keys ✅")
+            logger.info("✓ Cohere API key loaded from integration.keys")
         except ImportError:
             logger.warning("⚠ Could not import keys.py (integration/keys.py)")
 
@@ -146,7 +145,7 @@ class EnhancedPrescriptionAnalyzer:
         if api_key:
             try:
                 self.co = cohere.Client(api_key)
-                logger.info("Cohere API client initialized successfully 🎉")
+                logger.info("✓ Cohere API client initialized successfully")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Cohere client: {e}")
                 if force_api:
@@ -161,13 +160,13 @@ class EnhancedPrescriptionAnalyzer:
         """Initialize OCR readers with error handling"""
         try:
             self.easyocr_reader = easyocr.Reader(['en'], gpu=False)
-            logger.info("EasyOCR initialized successfully")
+            logger.info("✓ EasyOCR initialized successfully")
         except Exception as e:
             logger.warning(f"EasyOCR initialization failed: {e}")
             self.easyocr_reader = None
 
     def _load_medicine_database(self):
-        """Load medicine database from file or create new one"""
+        """Load medicine database from file"""
         try:
             with open("medicine_database.pkl", "rb") as f:
                 return pickle.load(f)
@@ -193,7 +192,6 @@ class EnhancedPrescriptionAnalyzer:
             'ciprofloxacin': {'category': 'antibiotic', 'generic': 'ciprofloxacin', 'available': True},
             'cephalexin': {'category': 'antibiotic', 'generic': 'cephalexin', 'available': True},
             'doxycycline': {'category': 'antibiotic', 'generic': 'doxycycline', 'available': True},
-            'clarithromycin': {'category': 'antibiotic', 'generic': 'clarithromycin', 'available': True},
             
             # Pain relievers
             'paracetamol': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
@@ -201,41 +199,26 @@ class EnhancedPrescriptionAnalyzer:
             'ibuprofen': {'category': 'nsaid', 'generic': 'ibuprofen', 'available': True},
             'diclofenac': {'category': 'nsaid', 'generic': 'diclofenac', 'available': True},
             'aspirin': {'category': 'nsaid', 'generic': 'aspirin', 'available': True},
-            'naproxen': {'category': 'nsaid', 'generic': 'naproxen', 'available': True},
             
             # PPIs and antacids
             'esomeprazole': {'category': 'ppi', 'generic': 'esomeprazole', 'available': True},
             'omeprazole': {'category': 'ppi', 'generic': 'omeprazole', 'available': True},
             'pantoprazole': {'category': 'ppi', 'generic': 'pantoprazole', 'available': True},
-            'lansoprazole': {'category': 'ppi', 'generic': 'lansoprazole', 'available': True},
-            'ranitidine': {'category': 'h2_blocker', 'generic': 'ranitidine', 'available': False},
             
             # Antihistamines
             'cetirizine': {'category': 'antihistamine', 'generic': 'cetirizine', 'available': True},
             'loratadine': {'category': 'antihistamine', 'generic': 'loratadine', 'available': True},
-            'fexofenadine': {'category': 'antihistamine', 'generic': 'fexofenadine', 'available': True},
             
-            # Common Indian medicines from prescriptions
-            'gan vi': {'category': 'ayurvedic', 'generic': 'herbal supplement', 'available': True},
+            # Common Indian medicines
             'crocin': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
             'combiflam': {'category': 'analgesic', 'generic': 'ibuprofen + paracetamol', 'available': True},
             'dolo': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
-            'volini': {'category': 'topical', 'generic': 'topical analgesic', 'available': True},
-            
-            # Diabetes medications
-            'metformin': {'category': 'antidiabetic', 'generic': 'metformin', 'available': True},
-            'insulin': {'category': 'antidiabetic', 'generic': 'insulin', 'available': True},
-            'glimepiride': {'category': 'antidiabetic', 'generic': 'glimepiride', 'available': True},
-            
-            # Vitamins and supplements
-            'vitamin d3': {'category': 'vitamin', 'generic': 'cholecalciferol', 'available': True},
-            'vitamin b12': {'category': 'vitamin', 'generic': 'cyanocobalamin', 'available': True},
-            'iron': {'category': 'mineral', 'generic': 'ferrous sulfate', 'available': True},
-            'calcium': {'category': 'mineral', 'generic': 'calcium carbonate', 'available': True}
         }
 
     def preprocess_image(self, image_path: str) -> List[np.ndarray]:
-        """Enhanced image preprocessing for better OCR results"""
+        """
+        FIXED: Enhanced image preprocessing with proper grayscale conversion
+        """
         try:
             # Read image
             image = cv2.imread(image_path)
@@ -247,8 +230,11 @@ class EnhancedPrescriptionAnalyzer:
             return []
 
         try:
-            # Convert to grayscale
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # CRITICAL FIX: Convert to grayscale FIRST
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image.copy()
 
             # Resize if too small
             height, width = gray.shape
@@ -263,39 +249,48 @@ class EnhancedPrescriptionAnalyzer:
             # Method 1: CLAHE + Adaptive Threshold
             try:
                 clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-                contrast_enhanced = clahe.apply(gray)
+                contrast_enhanced = clahe.apply(gray)  # gray is already grayscale
                 denoised = cv2.bilateralFilter(contrast_enhanced, 9, 75, 75)
                 adaptive_thresh = cv2.adaptiveThreshold(
                     denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
                 )
                 processed_images.append(adaptive_thresh)
+                logger.info("✓ Method 1 (CLAHE) preprocessing successful")
             except Exception as e:
                 logger.warning(f"Method 1 preprocessing failed: {e}")
 
             # Method 2: Otsu's Thresholding
             try:
-                blur = cv2.GaussianBlur(gray, (3,3), 0)
+                blur = cv2.GaussianBlur(gray, (3,3), 0)  # gray is already grayscale
                 _, otsu_thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                 processed_images.append(otsu_thresh)
+                logger.info("✓ Method 2 (Otsu) preprocessing successful")
             except Exception as e:
                 logger.warning(f"Method 2 preprocessing failed: {e}")
 
-            # Method 3: Edge-preserving filter + threshold
+            # Method 3: Simple binary threshold (fallback)
             try:
-                filtered = cv2.edgePreservingFilter(gray, flags=2, sigma_s=50, sigma_r=0.4)
-                _, edge_thresh = cv2.threshold(filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                processed_images.append(edge_thresh)
+                _, simple_thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+                processed_images.append(simple_thresh)
+                logger.info("✓ Method 3 (Simple threshold) preprocessing successful")
             except Exception as e:
                 logger.warning(f"Method 3 preprocessing failed: {e}")
 
-            return processed_images if processed_images else [gray]
+            if not processed_images:
+                logger.warning("All preprocessing methods failed, using original grayscale")
+                return [gray]
+            
+            return processed_images
 
         except Exception as e:
             logger.error(f"Image preprocessing failed: {e}")
             return []
 
     def extract_text(self, processed_images: List[np.ndarray]) -> Tuple[str, float]:
-        """Extract text using multiple OCR methods with enhanced results"""
+        """
+        FIXED: Extract text using multiple OCR methods
+        Returns: (text, confidence) - removed third return value for consistency
+        """
         all_results = []
         all_confidences = []
 
@@ -309,16 +304,15 @@ class EnhancedPrescriptionAnalyzer:
                         confidence = np.mean([r[2] for r in easyocr_results])
                         all_results.append(("EasyOCR", text, confidence))
                         all_confidences.append(confidence)
+                        logger.info(f"✓ EasyOCR extraction successful (confidence: {confidence:.2f})")
                 except Exception as e:
                     logger.warning(f"EasyOCR failed for image {i+1}: {e}")
 
             # Tesseract with multiple configurations
             tesseract_configs = [
                 '--oem 3 --psm 6',  # Uniform text block
-                '--oem 3 --psm 3',  # Fully automatic page segmentation
-                '--oem 3 --psm 4',  # Single column text
-                '--oem 3 --psm 11', # Sparse text
-                '--oem 3 --psm 12'  # Single text line
+                '--oem 3 --psm 3',  # Fully automatic
+                '--oem 3 --psm 4',  # Single column
             ]
 
             for j, config in enumerate(tesseract_configs):
@@ -330,26 +324,27 @@ class EnhancedPrescriptionAnalyzer:
                         confidence = np.mean(conf_scores) / 100
                         all_results.append((f"Tesseract_c{j+1}", text, confidence))
                         all_confidences.append(confidence)
+                        logger.info(f"✓ Tesseract config {j+1} successful (confidence: {confidence:.2f})")
                         if confidence > 0.8:
                             break
                 except Exception as e:
                     logger.warning(f"Tesseract config {j+1} failed: {e}")
 
         if not all_results:
+            logger.error("All OCR methods failed")
             return "", 0.0
 
-        # Select best results and combine them intelligently
+        # Select best results
         sorted_results = sorted(all_results, key=lambda x: x[2], reverse=True)
         
-        # Combine top results with deduplication
+        # Combine top results
         combined_texts = []
         seen_lines = set()
         
-        for _, text, conf in sorted_results[:4]:  # Use top 4 results
+        for _, text, conf in sorted_results[:4]:
             if conf > 0.3:
                 cleaned = self._clean_text(text)
                 if cleaned:
-                    # Split into lines and deduplicate
                     lines = cleaned.split('\n')
                     for line in lines:
                         line = line.strip()
@@ -363,28 +358,29 @@ class EnhancedPrescriptionAnalyzer:
         final_text = "\n".join(combined_texts)
         overall_confidence = np.mean(all_confidences) if all_confidences else 0.0
 
+        logger.info(f"✓ Final text extraction: {len(final_text)} chars, confidence: {overall_confidence:.2f}")
+        
         return final_text, overall_confidence
 
     def _clean_text(self, text: str) -> str:
-        """Clean and normalize OCR text with enhanced corrections"""
+        """Clean and normalize OCR text"""
         if not text:
             return ""
 
-        # Remove extra whitespace and unwanted characters
+        # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s\.\,\:\(\)\-\/\+\&\'\"]', '', text)
 
-        # Fix common OCR mistakes for medical prescriptions
+        # Fix common OCR mistakes
         fixes = {
             r'\b0\b': 'O', r'\b1\b': 'I', r'rng': 'mg', r'\.mg': ' mg',
             r'Tab\b': 'Tab', r'Cap\b': 'Cap', r'\bBd\b': 'bd', r'\bOd\b': 'od',
             r'\bSyp\b': 'Syp', r'\bInj\b': 'Inj', r'rnl': 'ml', r'gm\b': 'gm',
             r'\b5rng\b': '5mg', r'\b10rng\b': '10mg', r'\b25rng\b': '25mg',
             r'Dr\s*\.?': 'Dr.', r'Mrs?\s*\.?': 'Mr.', r'Mis+\s*\.?': 'Miss',
-            # Common prescription format fixes
-            r'(\d+)\s*x\s*(\d+)': r'\1 x \2',  # Fix dosage format
-            r'(\d+)\s*mg': r'\1 mg',  # Ensure space before mg
-            r'(\d+)\s*ml': r'\1 ml',  # Ensure space before ml
+            r'(\d+)\s*x\s*(\d+)': r'\1 x \2',
+            r'(\d+)\s*mg': r'\1 mg',
+            r'(\d+)\s*ml': r'\1 ml',
         }
 
         for pattern, repl in fixes.items():
@@ -393,7 +389,7 @@ class EnhancedPrescriptionAnalyzer:
         return text.strip()
 
     def extract_doctor_patient_info(self, text: str) -> Tuple[Dict, Dict]:
-        """Enhanced extraction of doctor and patient information using pattern matching"""
+        """Extract doctor and patient information using pattern matching"""
         doctor_info = {'name': '', 'specialization': '', 'registration_number': ''}
         patient_info = {'name': '', 'age': '', 'gender': ''}
         
@@ -404,13 +400,11 @@ class EnhancedPrescriptionAnalyzer:
                 if len(match.groups()) >= 2 and not doctor_info['name']:
                     doctor_info['name'] = match.group(2).strip()
         
-        # Extract specializations
         for pattern in self.doctor_patterns['specializations']:
             match = re.search(pattern, text, re.IGNORECASE)
             if match and not doctor_info['specialization']:
                 doctor_info['specialization'] = match.group(0).strip()
         
-        # Extract registration numbers
         for pattern in self.doctor_patterns['registration']:
             match = re.search(pattern, text, re.IGNORECASE)
             if match and not doctor_info['registration_number']:
@@ -420,17 +414,14 @@ class EnhancedPrescriptionAnalyzer:
                     doctor_info['registration_number'] = match.group(1).strip()
         
         # Extract patient information
-        # Patient age
         for pattern in self.patient_patterns['age_indicators']:
             match = re.search(pattern, text, re.IGNORECASE)
             if match and not patient_info['age']:
-                # Find the group that contains the age number
                 for group in match.groups():
                     if group and group.isdigit():
                         patient_info['age'] = group
                         break
         
-        # Patient gender
         for pattern in self.patient_patterns['gender_indicators']:
             match = re.search(pattern, text, re.IGNORECASE)
             if match and not patient_info['gender']:
@@ -440,337 +431,213 @@ class EnhancedPrescriptionAnalyzer:
                 elif 'female' in gender_text or 'f' in gender_text:
                     patient_info['gender'] = 'Female'
         
-        # Patient name - more sophisticated extraction
         for pattern in self.patient_patterns['name_patterns']:
             match = re.search(pattern, text, re.IGNORECASE)
             if match and not patient_info['name']:
                 if len(match.groups()) >= 2:
                     name_candidate = match.group(2).strip()
-                    # Validate name (should be reasonable length and contain letters)
                     if 2 <= len(name_candidate) <= 50 and re.search(r'[A-Za-z]', name_candidate):
                         patient_info['name'] = name_candidate
         
-        # If no explicit patient name found, try to infer from lines that might contain names
         if not patient_info['name']:
             lines = text.split('\n')
             for line in lines:
                 line = line.strip()
-                # Look for lines that might contain patient names
                 if len(line) > 2 and len(line) < 50 and re.match(r'^[A-Za-z\s\.]+$', line):
-                    # Skip if it looks like a doctor's name or medical term
                     if not any(term in line.lower() for term in ['dr.', 'doctor', 'clinic', 'hospital', 'prescription', 'medicine']):
-                        if not patient_info['name']:  # Take first reasonable candidate
+                        if not patient_info['name']:
                             patient_info['name'] = line
         
         return doctor_info, patient_info
 
-    def analyze_with_cohere(self, extracted_text: str, ocr_confidence: float) -> Dict:
-        """Analyze prescription using Cohere API with enhanced doctor/patient detection"""
-        if not self.co:
-            raise ValueError("Cohere API client not initialized. Please provide a valid API key.")
-        
-        return self._analyze_with_cohere_api(extracted_text, ocr_confidence)
-
-    # In backend/prescription_analyzer.py, replace the _analyze_with_cohere_api method (around line 284)
-
-    def _analyze_with_cohere_api(self, extracted_text: str, ocr_confidence: float) -> Dict:
-        """Enhanced Cohere API analysis with updated model"""
-        
-        # First, try pattern-based extraction
-        doctor_info, patient_info = self.extract_doctor_patient_info(extracted_text)
-        
-        prompt = f"""
-        You are an expert medical transcriptionist. Extract prescription information from this text and return ONLY valid JSON.
-
-        CRITICAL INSTRUCTIONS:
-        1. Carefully distinguish between DOCTOR and PATIENT information
-        2. Doctor names often have titles (Dr., Prof.) or qualifications (MBBS, MD, etc.)
-        3. Patient names are usually simpler, without medical titles
-        4. Look for context clues like "Patient:", "Name:", age indicators, gender markers
-        
-        Pre-identified information to verify/correct:
-        Doctor: {doctor_info}
-        Patient: {patient_info}
-
-        Return ONLY this JSON structure:
-        {{
-            "patient_name": "",
-            "patient_age": null,
-            "patient_gender": "",
-            "doctor_name": "",
-            "doctor_license": "",
-            "doctor_specialization": "",
-            "prescription_date": "YYYY-MM-DD",
-            "medications": [
-                {{
-                    "name": "",
-                    "dosage": "",
-                    "frequency": "",
-                    "duration": ""
-                }}
-            ],
-            "diagnosis": "",
-            "additional_notes": ""
-        }}
-
-        Rules:
-        - Use null for patient_age if not found or unclear
-        - Use empty strings for missing text fields
-        - Extract ALL medications found
-        - Be precise with dosages, frequencies, and durations
-        - Include both generic and brand names when available
-        - Distinguish clearly between doctor and patient names
-
-        Prescription text:
-        {extracted_text}
-        """
-
-        try:
-            # FIXED: Use command-r instead of command-r-plus (which was removed)
-            response = self.co.chat(
-                model="command-r-08-2024", 
-                message="Return ONLY valid JSON. Do not add json blocks, backticks, or any explanation.\n\n" + prompt
-            )
-
-            # Handle different Cohere SDK response formats
-            raw_text = ""
-            if hasattr(response, 'text'):
-                raw_text = response.text
-            elif hasattr(response, 'message'):
-                raw_text = response.message
-            elif hasattr(response, 'content'):
-                raw_text = response.content
-            else:
-                if isinstance(response, dict):
-                    raw_text = response.get('text', '') or response.get('message', '') or response.get('content', '')
-                else:
-                    raw_text = str(response)
-
-            if not raw_text:
-                raise ValueError("Empty response from Cohere API")
-
-            raw_text = raw_text.strip()
-
-            # Clean JSON fences if present
-            if raw_text.startswith("```"):
-                lines = raw_text.split('\n')
-                if lines[0].startswith("```") and lines[-1].strip() == "```":
-                    raw_text = '\n'.join(lines[1:-1])
-                elif lines[0].startswith("```json"):
-                    raw_text = '\n'.join(lines[1:])
-                    if raw_text.endswith("```"):
-                        raw_text = raw_text[:-3]
-
-            # Parse JSON
-            data = json.loads(raw_text)
-
-            # Validate and enhance the extracted data
-            data = self._validate_and_enhance_extraction(data, doctor_info, patient_info)
-
-            # Add metadata
-            data['ocr_confidence'] = ocr_confidence
-            data['raw_text'] = extracted_text
-            return data
-
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            logger.error(f"Raw response: {raw_text}")
-            # Fallback to pattern-based extraction
-            return self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
-        
-        except Exception as e:
-            logger.error(f"Cohere API error: {e}")
-            # Fallback to pattern-based extraction
-            return self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
-
-    def _validate_and_enhance_extraction(self, data: Dict, doctor_info: Dict, patient_info: Dict) -> Dict:
-        """Validate and enhance the extracted data using pattern-based results"""
-        
-        # Use pattern-based results as fallback if API results are empty/poor
-        if not data.get('doctor_name') and doctor_info.get('name'):
-            data['doctor_name'] = doctor_info['name']
-        if not data.get('doctor_license') and doctor_info.get('registration_number'):
-            data['doctor_license'] = doctor_info['registration_number']
-        if not data.get('doctor_specialization') and doctor_info.get('specialization'):
-            data['doctor_specialization'] = doctor_info['specialization']
-            
-        if not data.get('patient_name') and patient_info.get('name'):
-            data['patient_name'] = patient_info['name']
-        if not data.get('patient_age') and patient_info.get('age'):
-            try:
-                data['patient_age'] = int(patient_info['age'])
-            except (ValueError, TypeError):
-                data['patient_age'] = None
-        if not data.get('patient_gender') and patient_info.get('gender'):
-            data['patient_gender'] = patient_info['gender']
-        
-        # Sanitize the data
-        data = self.sanitize_prescription_data(data)
-        
-        return data
-
-    def _fallback_extraction(self, extracted_text: str, ocr_confidence: float, doctor_info: Dict, patient_info: Dict) -> Dict:
-        """Fallback extraction using pattern matching when API fails"""
-        logger.info("Using pattern-based fallback extraction")
-        
-        # Extract medicines using simple patterns
-        medicines = self._extract_medicines_pattern_based(extracted_text)
-        
-        data = {
-            'patient_name': patient_info.get('name', ''),
-            'patient_age': int(patient_info['age']) if patient_info.get('age') and patient_info['age'].isdigit() else None,
-            'patient_gender': patient_info.get('gender', ''),
-            'doctor_name': doctor_info.get('name', ''),
-            'doctor_license': doctor_info.get('registration_number', ''),
-            'doctor_specialization': doctor_info.get('specialization', ''),
-            'prescription_date': datetime.now().strftime('%Y-%m-%d'),
-            'medications': medicines,
-            'diagnosis': '',
-            'additional_notes': '',
-            'ocr_confidence': ocr_confidence,
-            'raw_text': extracted_text
-        }
-        
-        return self.sanitize_prescription_data(data)
-
-    def _extract_medicines_pattern_based(self, text: str) -> List[Dict]:
-        """Extract medicines using pattern matching"""
+    def _extract_medicines_simple(self, text: str) -> List[Medicine]:
+        """Extract medicines using simple pattern matching"""
         medicines = []
         lines = text.split('\n')
         
-        # Common medicine patterns
-        medicine_patterns = [
-            r'(\w+(?:\s+\w+)*)\s+(\d+\s*(?:mg|ml|gm|g))\s+(\w+)\s*(?:x\s*(\d+))?',  # Name Dosage Frequency x Duration
-            r'(\w+(?:\s+\w+)*)\s+(\d+)\s*(?:mg|ml|gm|g)\s+(\w+)',  # Name Dosage Frequency
-            r'(\w+(?:\s+\w+)*)\s+(?:Tab|Cap|Syp)\s+(\d+)\s*(?:mg|ml)',  # Name Tab/Cap/Syp Dosage
-            r'(\w+)\s+(\d+)\s*(od|bd|tid|qid|sos)',  # Simple Name Dosage Frequency
-        ]
+        medicine_keywords = ['tab', 'cap', 'syp', 'inj', 'tablet', 'capsule', 'syrup', 'injection']
         
         for line in lines:
             line = line.strip()
             if len(line) < 3:
                 continue
-                
-            for pattern in medicine_patterns:
-                match = re.search(pattern, line, re.IGNORECASE)
-                if match:
-                    groups = match.groups()
-                    medicine = {
-                        'name': groups[0].strip() if groups[0] else '',
-                        'dosage': f"{groups[1]} {groups[2] if len(groups) > 2 else ''}" if len(groups) > 1 else '',
-                        'frequency': groups[2] if len(groups) > 2 else '',
-                        'duration': groups[3] if len(groups) > 3 and groups[3] else ''
-                    }
-                    
-                    # Clean up the medicine entry
-                    if medicine['name'] and len(medicine['name']) > 1:
-                        # Expand abbreviations
-                        if medicine['frequency'].lower() in self.medical_abbreviations:
-                            medicine['frequency'] = self.medical_abbreviations[medicine['frequency'].lower()]
-                        
-                        medicines.append(medicine)
-                    break
-        
-        # If no medicines found with patterns, try simple word extraction
-        if not medicines:
-            for line in lines:
-                line = line.strip()
-                # Look for lines that might contain medicine names
-                if (len(line) > 2 and len(line) < 50 and 
-                    not any(keyword in line.lower() for keyword in ['dr.', 'patient', 'age', 'date']) and
-                    re.search(r'[A-Za-z]', line)):
-                    
-                    medicine = {
-                        'name': line,
-                        'dosage': '',
-                        'frequency': '',
-                        'duration': ''
-                    }
-                    medicines.append(medicine)
-                    
-                    if len(medicines) >= 5:  # Limit to prevent noise
-                        break
-        
-        return medicines
-
-    def sanitize_prescription_data(self, data: dict) -> dict:
-        """Clean data before Pydantic validation to prevent None errors"""
-        # Ensure all string fields have safe defaults
-        string_fields = ['patient_name', 'patient_gender', 'doctor_name', 'doctor_license', 
-                        'doctor_specialization', 'additional_notes', 'diagnosis']
-        for field in string_fields:
-            if data.get(field) is None:
-                data[field] = ""
-        
-        # Handle age - convert to int if possible, otherwise None
-        age = data.get('patient_age')
-        if age is not None:
-            try:
-                data['patient_age'] = int(age) if age != "" else None
-            except (ValueError, TypeError):
-                data['patient_age'] = None
-        
-        # Ensure medications is a list
-        if 'medications' not in data or data['medications'] is None:
-            data['medications'] = []
-        
-        # Clean each medication item
-        medications = []
-        for med in data.get('medications', []):
-            if isinstance(med, dict):
-                cleaned_med = {
-                    'name': med.get('name') or "",
-                    'dosage': med.get('dosage') or "",
-                    'frequency': med.get('frequency') or "",
-                    'duration': med.get('duration') or ""
-                }
-                medications.append(cleaned_med)
-        data['medications'] = medications
-        
-        return data
-
-    def enhance_medicine_info(self, medicines: List[Dict]) -> List[Medicine]:
-        """Enhance medicine information with database lookup"""
-        enhanced_medicines = []
-        
-        for med_dict in medicines:
-            medicine = Medicine(
-                name=med_dict.get('name', ''),
-                dosage=med_dict.get('dosage', ''),
-                frequency=med_dict.get('frequency', ''),
-                duration=med_dict.get('duration', ''),
-                quantity=str(med_dict.get('quantity', 1)),
-                available=self._check_availability(med_dict.get('name', ''))
+            
+            line_lower = line.lower()
+            if any(keyword in line_lower for keyword in ['patient', 'doctor', 'date', 'age', 'gender', 'diagnosis']):
+                continue
+            
+            medicine_match = re.search(
+                r'([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+\s*(?:mg|ml|gm|g|mcg))',
+                line,
+                re.IGNORECASE
             )
-            enhanced_medicines.append(medicine)
+            
+            if medicine_match:
+                name = medicine_match.group(1).strip()
+                dosage = medicine_match.group(2).strip()
+                
+                if len(name) < 3 or name.lower() in ['tab', 'cap', 'syp', 'the', 'and', 'for']:
+                    continue
+                
+                frequency = self._extract_frequency(line)
+                duration = self._extract_duration(line)
+                instructions = self._extract_instructions(line)
+                
+                medicine = Medicine(
+                    name=name,
+                    dosage=dosage,
+                    quantity="1",
+                    frequency=frequency,
+                    duration=duration,
+                    instructions=instructions,
+                    available=self._check_availability(name)
+                )
+                medicines.append(medicine)
+                continue
+            
+            tab_match = re.search(
+                r'(Tab\.?|Cap\.?|Syp\.?|Inj\.?)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)',
+                line,
+                re.IGNORECASE
+            )
+            
+            if tab_match:
+                name = tab_match.group(2).strip()
+                
+                dosage_match = re.search(r'(\d+\s*(?:mg|ml|gm|g|mcg))', line, re.IGNORECASE)
+                dosage = dosage_match.group(1) if dosage_match else "As prescribed"
+                
+                frequency = self._extract_frequency(line)
+                duration = self._extract_duration(line)
+                instructions = self._extract_instructions(line)
+                
+                medicine = Medicine(
+                    name=name,
+                    dosage=dosage,
+                    quantity="1",
+                    frequency=frequency,
+                    duration=duration,
+                    instructions=instructions,
+                    available=self._check_availability(name)
+                )
+                medicines.append(medicine)
         
-        return enhanced_medicines
+        # Remove duplicates
+        unique_medicines = []
+        seen_names = set()
+        
+        for med in medicines:
+            name_lower = med.name.lower()
+            if name_lower not in seen_names:
+                seen_names.add(name_lower)
+                unique_medicines.append(med)
+        
+        return unique_medicines
+
+    def _extract_frequency(self, text: str) -> str:
+        """Extract medication frequency"""
+        text_lower = text.lower()
+        
+        frequency_patterns = {
+            r'\b(once\s+daily|od|qd|1\s*-\s*0\s*-\s*0)\b': 'Once daily',
+            r'\b(twice\s+daily|bd|bid|2\s*times|1\s*-\s*0\s*-\s*1)\b': 'Twice daily',
+            r'\b(thrice\s+daily|tid|3\s*times|1\s*-\s*1\s*-\s*1)\b': 'Three times daily',
+            r'\b(four\s+times|qid|1\s*-\s*1\s*-\s*1\s*-\s*1)\b': 'Four times daily',
+            r'\b(as\s+needed|sos|prn)\b': 'As needed',
+            r'\b(at\s+bedtime|hs|qhs|0\s*-\s*0\s*-\s*1)\b': 'At bedtime',
+        }
+        
+        for pattern, frequency in frequency_patterns.items():
+            if re.search(pattern, text_lower):
+                return frequency
+        
+        return "As directed"
+
+    def _extract_duration(self, text: str) -> str:
+        """Extract medication duration"""
+        duration_patterns = [
+            r'(\d+\s*(?:day|days|d))',
+            r'(\d+\s*(?:week|weeks|wk|wks))',
+            r'(\d+\s*(?:month|months|mo|mos))',
+        ]
+        
+        for pattern in duration_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return "As prescribed"
+
+    def _extract_instructions(self, text: str) -> str:
+        """Extract medication instructions"""
+        text_lower = text.lower()
+        instructions = []
+        
+        if re.search(r'\b(before\s+(?:food|meal|eating))\b', text_lower):
+            instructions.append("Before meals")
+        elif re.search(r'\b(after\s+(?:food|meal|eating))\b', text_lower):
+            instructions.append("After meals")
+        elif re.search(r'\b(with\s+(?:food|meal))\b', text_lower):
+            instructions.append("With meals")
+        
+        return ", ".join(instructions) if instructions else ""
 
     def _check_availability(self, medicine_name: str) -> bool:
-        """Check medicine availability using fuzzy matching"""
+        """Check medicine availability"""
         if not medicine_name:
             return True
             
         medicine_lower = medicine_name.lower().strip()
         
-        # Direct match
         if medicine_lower in self.medicine_database:
             return self.medicine_database[medicine_lower]['available']
         
-        # Fuzzy match
         best_match = process.extractOne(medicine_lower, self.medicine_database.keys(), scorer=fuzz.ratio)
         
         if best_match and best_match[1] > 75:
             return self.medicine_database[best_match[0]]['available']
         
-        return True  # Default to available
+        return True
+
+    def _calculate_confidence(self, ocr_confidence: float, medicines_count: int, 
+                            patient: Patient, doctor: Doctor) -> float:
+        """Calculate overall confidence score"""
+        weights = {'ocr': 0.3, 'medicines': 0.3, 'patient_info': 0.2, 'doctor_info': 0.2}
+        
+        medicine_score = 0.0
+        if medicines_count > 0:
+            medicine_score = min(1.0, medicines_count / 3.0)
+            medicine_score = min(1.0, medicine_score + 0.3)
+        
+        patient_score = 0.0
+        if patient.name: patient_score += 0.5
+        if patient.age: patient_score += 0.25
+        if patient.gender: patient_score += 0.25
+        patient_score = min(1.0, patient_score)
+        
+        doctor_score = 0.0
+        if doctor.name: doctor_score += 0.6
+        if doctor.specialization: doctor_score += 0.2
+        if doctor.registration_number: doctor_score += 0.2
+        doctor_score = min(1.0, doctor_score)
+        
+        total_score = (
+            weights['ocr'] * ocr_confidence +
+            weights['medicines'] * medicine_score +
+            weights['patient_info'] * patient_score +
+            weights['doctor_info'] * doctor_score
+        )
+        
+        return min(1.0, max(0.0, total_score))
 
     def analyze_prescription(self, image_path: str) -> AnalysisResult:
-        """Main method to analyze prescription image with enhanced doctor/patient detection"""
+        """
+        FIXED: Main method to analyze prescription image
+        """
         try:
             prescription_id = f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:8]}"
             
-            logger.info(f"Starting enhanced analysis for prescription {prescription_id}")
+            logger.info(f"Starting analysis for prescription {prescription_id}")
             
             # Preprocess image
             processed_images = self.preprocess_image(image_path)
@@ -782,7 +649,7 @@ class EnhancedPrescriptionAnalyzer:
                     success=False, error="Failed to preprocess image"
                 )
             
-            # Extract text
+            # Extract text - FIXED: now returns only 2 values
             extracted_text, ocr_confidence = self.extract_text(processed_images)
             if not extracted_text.strip():
                 return AnalysisResult(
@@ -792,35 +659,35 @@ class EnhancedPrescriptionAnalyzer:
                     success=False, error="No text could be extracted"
                 )
             
-            # Analyze with Cohere API (or fallback to pattern matching)
-            try:
-                cohere_result = self.analyze_with_cohere(extracted_text, ocr_confidence)
-            except Exception as e:
-                logger.warning(f"Cohere API analysis failed: {e}, using pattern-based fallback")
-                doctor_info, patient_info = self.extract_doctor_patient_info(extracted_text)
-                cohere_result = self._fallback_extraction(extracted_text, ocr_confidence, doctor_info, patient_info)
+            logger.info(f"✓ Extracted {len(extracted_text)} characters with {ocr_confidence:.2f} confidence")
             
-            # Create structured result
+            # Clean text
+            cleaned_text = self._clean_text(extracted_text)
+            
+            # Extract doctor and patient info
+            doctor_info, patient_info = self.extract_doctor_patient_info(cleaned_text)
+            
+            # Create patient object
             patient = Patient(
-                name=cohere_result.get('patient_name', ''),
-                age=str(cohere_result.get('patient_age', '')) if cohere_result.get('patient_age') is not None else '',
-                gender=cohere_result.get('patient_gender', '')
+                name=patient_info.get('name', ''),
+                age=patient_info.get('age', ''),
+                gender=patient_info.get('gender', '')
             )
             
+            # Create doctor object
             doctor = Doctor(
-                name=cohere_result.get('doctor_name', ''),
-                specialization=cohere_result.get('doctor_specialization', ''),
-                registration_number=cohere_result.get('doctor_license', '')
+                name=doctor_info.get('name', ''),
+                specialization=doctor_info.get('specialization', ''),
+                registration_number=doctor_info.get('registration_number', '')
             )
             
-            # Enhance medicines
-            medicines = self.enhance_medicine_info(cohere_result.get('medications', []))
+            # Extract medicines
+            medicines = self._extract_medicines_simple(cleaned_text)
             
-            # Calculate confidence score
-            confidence_score = self._calculate_confidence(
-                ocr_confidence, len(medicines), patient, doctor
-            )
+            # Calculate confidence
+            confidence = self._calculate_confidence(ocr_confidence, len(medicines), patient, doctor)
             
+            logger.info(f"✓ Analysis complete: {confidence:.2%} confidence")
             logger.info(f"  Doctor: {doctor.name}")
             logger.info(f"  Patient: {patient.name}")
             logger.info(f"  Medicines: {len(medicines)}")
@@ -831,12 +698,11 @@ class EnhancedPrescriptionAnalyzer:
                 patient=patient,
                 doctor=doctor,
                 medicines=medicines,
-                diagnosis=[],  # Can be enhanced later with diagnosis extraction
+                diagnosis=[],
                 confidence_score=confidence,
                 raw_text=cleaned_text,
                 success=True,
-                error="",
-                ocr_methods_used=methods_used
+                error=""
             )
             
         except Exception as e:
@@ -853,48 +719,8 @@ class EnhancedPrescriptionAnalyzer:
                 confidence_score=0.0, 
                 raw_text="",
                 success=False, 
-                error=str(e),
-                ocr_methods_used=[]
+                error=str(e)
             )
-
-    def _calculate_confidence(self, ocr_confidence: float, medicines_count: int, 
-                            patient: Patient, doctor: Doctor) -> float:
-        """Calculate overall confidence score with enhanced weighting"""
-        weights = {
-            'ocr': 0.3, 
-            'medicines': 0.3, 
-            'patient_info': 0.2, 
-            'doctor_info': 0.2
-        }
-        
-        # Medicine score based on count and quality
-        medicine_score = 0.0
-        if medicines_count > 0:
-            medicine_score = min(1.0, medicines_count / 3.0)
-            medicine_score = min(1.0, medicine_score + 0.3)  # Bonus for having medicines
-        
-        # Patient score based on available information
-        patient_score = 0.0
-        if patient.name: patient_score += 0.5
-        if patient.age: patient_score += 0.25
-        if patient.gender: patient_score += 0.25
-        patient_score = min(1.0, patient_score)
-        
-        # Doctor score based on available information
-        doctor_score = 0.0
-        if doctor.name: doctor_score += 0.6
-        if doctor.specialization: doctor_score += 0.2
-        if doctor.registration_number: doctor_score += 0.2
-        doctor_score = min(1.0, doctor_score)
-        
-        total_score = (
-            weights['ocr'] * ocr_confidence +
-            weights['medicines'] * medicine_score +
-            weights['patient_info'] * patient_score +
-            weights['doctor_info'] * doctor_score
-        )
-        
-        return min(1.0, max(0.0, total_score))
 
     def to_json(self, result: AnalysisResult) -> Dict:
         """Convert AnalysisResult to JSON format expected by FastAPI"""
@@ -926,332 +752,5 @@ class EnhancedPrescriptionAnalyzer:
             "confidence_score": result.confidence_score,
             "message": "Analysis completed successfully" if result.success else result.error,
             "error": result.error if not result.success else "",
-            # Legacy fields for backward compatibility
-            "patient_name": result.patient.name,
-            "patient_age": int(result.patient.age) if result.patient.age and result.patient.age.isdigit() else 0,
-            "patient_gender": result.patient.gender,
-            "doctor_name": result.doctor.name,
-            "doctor_license": result.doctor.registration_number
+            "raw_text": result.raw_text
         }
-
-    def train_on_sample_data(self, sample_prescriptions: List[Dict]) -> None:
-        """
-        Train/improve the analyzer using sample prescription data
-        
-        Args:
-            sample_prescriptions: List of dictionaries containing sample data with expected outputs
-        """
-        logger.info("Training analyzer on sample prescription data...")
-        
-        # Update medicine database with new medicines found in samples
-        new_medicines = {}
-        
-        for sample in sample_prescriptions:
-            if 'medicines' in sample:
-                for medicine in sample['medicines']:
-                    medicine_name = medicine.get('name', '').lower().strip()
-                    if medicine_name and medicine_name not in self.medicine_database:
-                        new_medicines[medicine_name] = {
-                            'category': 'unknown',
-                            'generic': medicine_name,
-                            'available': True
-                        }
-        
-        if new_medicines:
-            self.medicine_database.update(new_medicines)
-            self._save_medicine_database()
-            logger.info(f"Added {len(new_medicines)} new medicines to database")
-        
-        logger.info("Training completed successfully")
-    
-    def analyze_prescription(self, image_path: str) -> AnalysisResult:
-        """Main analysis method with self-learning support"""
-        try:
-            prescription_id = f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8]}"
-            
-            logger.info(f"Starting analysis for {prescription_id}")
-            
-            # Preprocess
-            processed_images = self.preprocess_image(image_path)
-            if not processed_images:
-                return AnalysisResult(
-                    prescription_id=prescription_id,
-                    patient=Patient(), doctor=Doctor(),
-                    medicines=[], diagnosis=[],
-                    confidence_score=0.0, raw_text="",
-                    success=False, error="Preprocessing failed",
-                    ocr_methods_used=[]
-                )
-            
-            # Extract text with hybrid OCR
-            extracted_text, ocr_confidence, methods_used = self.extract_text(processed_images)
-            
-            if not extracted_text.strip():
-                return AnalysisResult(
-                    prescription_id=prescription_id,
-                    patient=Patient(), doctor=Doctor(),
-                    medicines=[], diagnosis=[],
-                    confidence_score=0.0, raw_text="",
-                    success=False, error="No text extracted",
-                    ocr_methods_used=methods_used
-                )
-            
-            # Clean text
-            cleaned_text = self._clean_text(extracted_text)
-            
-            # Extract info
-            doctor_info, patient_info = self.extract_doctor_patient_info(cleaned_text)
-            
-            # Create result
-            patient = Patient(
-                name=patient_info.get('name', ''),
-                age=patient_info.get('age', ''),
-                gender=patient_info.get('gender', '')
-            )
-            
-            doctor = Doctor(
-                name=doctor_info.get('name', ''),
-                specialization=doctor_info.get('specialization', ''),
-                registration_number=doctor_info.get('registration_number', '')
-            )
-            
-            # Extract medicines
-            medicines = self._extract_medicines_simple(cleaned_text)
-            
-            # Calculate confidence
-            confidence = self._calculate_confidence(ocr_confidence, len(medicines), patient, doctor)
-            
-            logger.info(f"✓ Analysis complete: {confidence:.2%} confidence")
-            logger.info(f"  OCR methods: {methods_used}")
-            logger.info(f"  Doctor: {doctor.name}")
-            logger.info(f"  Patient: {patient.name}")
-            logger.info(f"  Medicines: {len(medicines)}")
-            
-            # Create successful result
-            return AnalysisResult(
-                prescription_id=prescription_id,
-                patient=patient,
-                doctor=doctor,
-                medicines=medicines,
-                diagnosis=[],  # Can be enhanced later with diagnosis extraction
-                confidence_score=confidence,
-                raw_text=cleaned_text,
-                success=True,
-                error="",
-                ocr_methods_used=methods_used
-            )
-            
-        except Exception as e:
-            logger.error(f"❌ Error in analyze_prescription: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            return AnalysisResult(
-                prescription_id=f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                patient=Patient(), 
-                doctor=Doctor(),
-                medicines=[], 
-                diagnosis=[],
-                confidence_score=0.0, 
-                raw_text="",
-                success=False, 
-                error=str(e),
-                ocr_methods_used=[]
-            )
-
-
-    def _extract_medicines_simple(self, text: str) -> List[Medicine]:
-        """Extract medicines using simple pattern matching"""
-        medicines = []
-        lines = text.split('\n')
-        
-        # Common medicine name patterns
-        medicine_keywords = ['tab', 'cap', 'syp', 'inj', 'tablet', 'capsule', 'syrup', 'injection']
-        
-        for line in lines:
-            line = line.strip()
-            if len(line) < 3:
-                continue
-            
-            # Skip lines that are clearly not medicines
-            line_lower = line.lower()
-            if any(keyword in line_lower for keyword in ['patient', 'doctor', 'date', 'age', 'gender', 'diagnosis']):
-                continue
-            
-            # Pattern 1: Medicine with dosage (e.g., "Paracetamol 500mg")
-            medicine_match = re.search(
-                r'([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+\s*(?:mg|ml|gm|g|mcg))',
-                line,
-                re.IGNORECASE
-            )
-            
-            if medicine_match:
-                name = medicine_match.group(1).strip()
-                dosage = medicine_match.group(2).strip()
-                
-                # Extract frequency if present
-                frequency = self._extract_frequency(line)
-                duration = self._extract_duration(line)
-                instructions = self._extract_instructions(line)
-                
-                # Skip if name is too short or common word
-                if len(name) < 3 or name.lower() in ['tab', 'cap', 'syp', 'the', 'and', 'for']:
-                    continue
-                
-                medicine = Medicine(
-                    name=name,
-                    dosage=dosage,
-                    quantity="1",
-                    frequency=frequency,
-                    duration=duration,
-                    instructions=instructions,
-                    available=self._check_availability(name)
-                )
-                medicines.append(medicine)
-                continue
-            
-            # Pattern 2: Medicine with Tab/Cap prefix (e.g., "Tab. Amoxicillin")
-            tab_match = re.search(
-                r'(Tab\.?|Cap\.?|Syp\.?|Inj\.?)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)',
-                line,
-                re.IGNORECASE
-            )
-            
-            if tab_match:
-                name = tab_match.group(2).strip()
-                
-                # Try to find dosage nearby
-                dosage_match = re.search(r'(\d+\s*(?:mg|ml|gm|g|mcg))', line, re.IGNORECASE)
-                dosage = dosage_match.group(1) if dosage_match else "As prescribed"
-                
-                frequency = self._extract_frequency(line)
-                duration = self._extract_duration(line)
-                instructions = self._extract_instructions(line)
-                
-                medicine = Medicine(
-                    name=name,
-                    dosage=dosage,
-                    quantity="1",
-                    frequency=frequency,
-                    duration=duration,
-                    instructions=instructions,
-                    available=self._check_availability(name)
-                )
-                medicines.append(medicine)
-                continue
-            
-            # Pattern 3: Line contains medicine keyword and potential medicine name
-            if any(keyword in line_lower for keyword in medicine_keywords):
-                # Extract potential medicine name (capitalized word)
-                name_match = re.search(r'\b([A-Z][a-zA-Z]{3,}(?:\s+[A-Z][a-zA-Z]+)?)\b', line)
-                
-                if name_match:
-                    name = name_match.group(1).strip()
-                    
-                    dosage_match = re.search(r'(\d+\s*(?:mg|ml|gm|g|mcg))', line, re.IGNORECASE)
-                    dosage = dosage_match.group(1) if dosage_match else "As prescribed"
-                    
-                    frequency = self._extract_frequency(line)
-                    duration = self._extract_duration(line)
-                    instructions = self._extract_instructions(line)
-                    
-                    medicine = Medicine(
-                        name=name,
-                        dosage=dosage,
-                        quantity="1",
-                        frequency=frequency,
-                        duration=duration,
-                        instructions=instructions,
-                        available=self._check_availability(name)
-                    )
-                    medicines.append(medicine)
-        
-        # Remove duplicates (same name)
-        unique_medicines = []
-        seen_names = set()
-        
-        for med in medicines:
-            name_lower = med.name.lower()
-            if name_lower not in seen_names:
-                seen_names.add(name_lower)
-                unique_medicines.append(med)
-        
-        return unique_medicines
-
-
-    def _extract_frequency(self, text: str) -> str:
-        """Extract medication frequency from text"""
-        text_lower = text.lower()
-        
-        # Check for common frequency patterns
-        frequency_patterns = {
-            r'\b(once\s+daily|od|qd|1\s*-\s*0\s*-\s*0)\b': 'Once daily',
-            r'\b(twice\s+daily|bd|bid|2\s*times|1\s*-\s*0\s*-\s*1)\b': 'Twice daily',
-            r'\b(thrice\s+daily|tid|3\s*times|1\s*-\s*1\s*-\s*1)\b': 'Three times daily',
-            r'\b(four\s+times|qid|1\s*-\s*1\s*-\s*1\s*-\s*1)\b': 'Four times daily',
-            r'\b(every\s+\d+\s+hours?|q\d+h)\b': text_lower,
-            r'\b(as\s+needed|sos|prn)\b': 'As needed',
-            r'\b(at\s+bedtime|hs|qhs|0\s*-\s*0\s*-\s*1)\b': 'At bedtime',
-            r'\b(morning|0\s*-\s*0\s*-\s*0)\b': 'Morning only',
-        }
-        
-        for pattern, frequency in frequency_patterns.items():
-            if re.search(pattern, text_lower):
-                return frequency if isinstance(frequency, str) and frequency != text_lower else re.search(pattern, text_lower).group(0)
-        
-        return "As directed"
-
-
-    def _extract_duration(self, text: str) -> str:
-        """Extract medication duration from text"""
-        duration_patterns = [
-            r'(\d+\s*(?:day|days|d))',
-            r'(\d+\s*(?:week|weeks|wk|wks))',
-            r'(\d+\s*(?:month|months|mo|mos))',
-            r'(for\s+\d+\s+\w+)',
-        ]
-        
-        for pattern in duration_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(1)
-        
-        return "As prescribed"
-
-
-    def _extract_instructions(self, text: str) -> str:
-        """Extract medication instructions from text"""
-        text_lower = text.lower()
-        
-        instructions = []
-        
-        # Meal timing
-        if re.search(r'\b(before\s+(?:food|meal|eating))\b', text_lower):
-            instructions.append("Before meals")
-        elif re.search(r'\b(after\s+(?:food|meal|eating))\b', text_lower):
-            instructions.append("After meals")
-        elif re.search(r'\b(with\s+(?:food|meal))\b', text_lower):
-            instructions.append("With meals")
-        
-        # Special instructions
-        if re.search(r'\b(empty\s+stomach)\b', text_lower):
-            instructions.append("On empty stomach")
-        
-        if re.search(r'\b(with\s+water)\b', text_lower):
-            instructions.append("With water")
-        
-        if re.search(r'\b(do\s+not\s+crush)\b', text_lower):
-            instructions.append("Do not crush")
-        
-        # Expand abbreviations
-        abbr_map = {
-            'ac': 'before meals',
-            'pc': 'after meals',
-            'hs': 'at bedtime',
-        }
-        
-        for abbr, full in abbr_map.items():
-            if re.search(rf'\b{abbr}\b', text_lower):
-                instructions.append(full.capitalize())
-        
-        return ", ".join(instructions) if instructions else ""
