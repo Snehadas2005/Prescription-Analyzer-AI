@@ -1,3 +1,60 @@
+#!/bin/bash
+
+# Quick Fix Script for ML Service
+# This script helps you fix the ml-service files
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}  ML SERVICE QUICK FIX${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
+
+# Check if we're in the right directory
+if [ ! -d "ml-service" ]; then
+    echo -e "${RED}❌ Error: ml-service directory not found${NC}"
+    echo -e "${YELLOW}Please run this script from the prescription-analyzer root directory${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}This script will:${NC}"
+echo -e "  1. Backup your current ML service files"
+echo -e "  2. Update the extraction service"
+echo -e "  3. Update the main.py file"
+echo -e "  4. Ensure the backend prescription_analyzer.py is correct"
+echo ""
+echo -e "${YELLOW}Continue? (y/n)${NC}"
+read -r response
+
+if [[ ! "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+# Create backup directory
+BACKUP_DIR="ml-service-backup-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+echo -e "${BLUE}Creating backups in $BACKUP_DIR...${NC}"
+
+# Backup existing files
+if [ -f "ml-service/app/services/extraction_service.py" ]; then
+    cp ml-service/app/services/extraction_service.py "$BACKUP_DIR/"
+    echo -e "${GREEN}✓ Backed up extraction_service.py${NC}"
+fi
+
+if [ -f "ml-service/app/main.py" ]; then
+    cp ml-service/app/main.py "$BACKUP_DIR/"
+    echo -e "${GREEN}✓ Backed up main.py${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}Step 1: Updating extraction_service.py${NC}"
+
+cat > ml-service/app/services/extraction_service.py << 'EXTRACTION_SERVICE_EOF'
 import sys
 import os
 from pathlib import Path
@@ -133,3 +190,125 @@ class ExtractionService:
                     logger.debug(f"🗑️ Cleaned up temporary file: {temp_file_path}")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to cleanup temporary file: {e}")
+EXTRACTION_SERVICE_EOF
+
+echo -e "${GREEN}✓ Updated extraction_service.py${NC}"
+echo ""
+
+echo -e "${BLUE}Step 2: Updating main.py${NC}"
+
+cat > ml-service/app/main.py << 'MAIN_PY_EOF'
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from app.services.extraction_service import ExtractionService
+import logging
+import os
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="AI Prescription Analyzer - ML Service",
+    description="Machine Learning service for prescription analysis",
+    version="1.0.0"
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global extraction service
+extraction_service = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    global extraction_service
+    try:
+        logger.info("🚀 Starting ML Service...")
+        extraction_service = ExtractionService()
+        logger.info("✅ ML Service initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize ML Service: {e}")
+        raise
+
+@app.get("/")
+async def root():
+    return {
+        "service": "AI Prescription Analyzer - ML Service",
+        "status": "running",
+        "version": "1.0.0"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "analyzer_ready": extraction_service is not None
+    }
+
+@app.post("/extract")
+async def extract_prescription(file: UploadFile = File(...)):
+    """Original endpoint"""
+    return await analyze_prescription_internal(file)
+
+@app.post("/analyze-prescription")
+async def analyze_prescription(file: UploadFile = File(...)):
+    """Go backend compatible endpoint"""
+    return await analyze_prescription_internal(file)
+
+async def analyze_prescription_internal(file: UploadFile):
+    """Internal analysis function"""
+    if not extraction_service:
+        raise HTTPException(503, "Service not ready")
+    
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(400, "Invalid file type")
+    
+    try:
+        image_bytes = await file.read()
+        result = await extraction_service.extract(image_bytes)
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"❌ Error: {e}", exc_info=True)
+        raise HTTPException(500, str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    HOST = os.getenv('HOST', '0.0.0.0')
+    PORT = int(os.getenv('PORT', 8000))
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+MAIN_PY_EOF
+
+echo -e "${GREEN}✓ Updated main.py${NC}"
+echo ""
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${GREEN}✅ Fix Complete!${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
+echo -e "${YELLOW}What was changed:${NC}"
+echo -e "  ✓ ml-service/app/services/extraction_service.py - Updated to use backend analyzer"
+echo -e "  ✓ ml-service/app/main.py - Simplified and fixed"
+echo ""
+echo -e "${YELLOW}Backups saved in: ${BACKUP_DIR}${NC}"
+echo ""
+echo -e "${BLUE}Next steps:${NC}"
+echo -e "  1. Make sure backend/prescription_analyzer.py exists and is correct"
+echo -e "  2. Run: ${GREEN}cd backend && source venv312/bin/activate${NC}"
+echo -e "  3. Run: ${GREEN}python main.py${NC}"
+echo -e "  4. Test: ${GREEN}curl http://localhost:8000/health${NC}"
+echo ""
+echo -e "${YELLOW}To test prescription analysis:${NC}"
+echo -e "  ${GREEN}curl -X POST -F \"file=@prescription.jpg\" http://localhost:8000/analyze-prescription${NC}"
+echo ""

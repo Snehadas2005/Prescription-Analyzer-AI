@@ -1,12 +1,3 @@
-"""
-FIXED VERSION - prescription_analyzer.py
-Place this file at: backend/prescription_analyzer.py
-
-This fixes:
-1. ValueError: extract_text returning wrong number of values
-2. OpenCV preprocessing failing on color images
-"""
-
 from __future__ import annotations
 import base64
 import cv2

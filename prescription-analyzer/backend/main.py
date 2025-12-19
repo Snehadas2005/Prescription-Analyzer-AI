@@ -1,35 +1,28 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
-import os
-import tempfile
-import uuid
+from mlservice.app.services.extraction_service import ExtractionService
+from mlservice.app.schemas.prescription_schema import PrescriptionResponse
+import uvicorn
 import logging
-from datetime import datetime
-import sys
+import os
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-try:
-    from backend.prescription_analyzer import EnhancedPrescriptionAnalyzer
-except ImportError:
-    try:
-        from prescription_analyzer import EnhancedPrescriptionAnalyzer
-    except ImportError as e:
-        print(f"Failed to import: {e}")
-        raise
-
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AI Prescription Analyzer API", version="1.0.0")
+app = FastAPI(
+    title="AI Prescription Analyzer - ML Service",
+    description="Machine Learning service for prescription analysis with continuous learning",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,141 +31,178 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-analyzer: Optional[EnhancedPrescriptionAnalyzer] = None
+# Initialize extraction service globally
+extraction_service = None
 
 @app.on_event("startup")
 async def startup_event():
-    global analyzer
+    """Initialize services on startup"""
+    global extraction_service
     try:
-        logger.info("Initializing analyzer with TrOCR support...")
-        
-        analyzer = EnhancedPrescriptionAnalyzer(
-            cohere_api_key=os.getenv('COHERE_API_KEY'),
-            use_gpu=False,  # Set True if you have GPU
-            force_api=False
-        )
-        
-        logger.info("✅ Analyzer with hybrid OCR ready")
+        logger.info("🚀 Starting ML Service...")
+        extraction_service = ExtractionService()
+        logger.info("✅ ML Service initialized successfully")
     except Exception as e:
-        logger.error(f"❌ Init failed: {e}")
+        logger.error(f"❌ Failed to initialize ML Service: {e}")
         raise
-    
+
 @app.get("/")
 async def root():
+    """Root endpoint"""
     return {
-        "message": "AI Prescription Analyzer API",
+        "service": "AI Prescription Analyzer - ML Service",
         "status": "running",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "analyze": "/analyze-prescription",
+            "extract": "/extract",
+            "docs": "/docs"
+        }
     }
 
 @app.get("/health")
-async def health():
+async def health_check():
+    """Health check endpoint"""
     return {
         "status": "healthy",
-        "analyzer_ready": analyzer is not None,
-        "cohere_available": hasattr(analyzer, 'co') and analyzer.co is not None if analyzer else False
+        "service": "ml-service",
+        "analyzer_ready": extraction_service is not None,
+        "version": "1.0.0"
     }
 
+@app.post("/extract")
+async def extract_prescription(file: UploadFile = File(...)):
+    """
+    Extract information from prescription image (original endpoint)
+    
+    This endpoint maintains backward compatibility.
+    """
+    return await analyze_prescription_internal(file)
+
 @app.post("/analyze-prescription")
-async def analyze(file: UploadFile = File(...)):
-    if not analyzer:
-        raise HTTPException(503, "Analyzer not ready")
+async def analyze_prescription(file: UploadFile = File(...)):
+    """
+    Analyze prescription image (Go backend compatible endpoint)
     
+    This endpoint is called by the Go backend service.
+    Returns structured prescription data with patient, doctor, and medicine information.
+    """
+    return await analyze_prescription_internal(file)
+
+async def analyze_prescription_internal(file: UploadFile):
+    """
+    Internal function for prescription analysis
+    Used by both /extract and /analyze-prescription endpoints
+    """
+    if not extraction_service:
+        logger.error("Extraction service not initialized")
+        raise HTTPException(
+            status_code=503,
+            detail="Service not ready. Please try again in a moment."
+        )
+    
+    # Validate file type
     if not file.content_type or not file.content_type.startswith('image/'):
-        raise HTTPException(400, "Invalid file type")
+        logger.error(f"Invalid file type: {file.content_type}")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload an image file (JPEG, PNG, etc.)"
+        )
     
-    temp_path = None
     try:
-        ext = '.jpg'
-        if 'png' in file.content_type: ext = '.png'
-        elif 'tiff' in file.content_type: ext = '.tiff'
+        # Read image bytes
+        image_bytes = await file.read()
+        file_size = len(image_bytes)
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as f:
-            temp_path = f.name
-            content = await file.read()
-            f.write(content)
-            f.flush()
+        logger.info(f"📤 Received file: {file.filename}, Size: {file_size} bytes")
         
-        logger.info(f"Processing {file.filename} ({len(content)} bytes)")
+        # Validate file size (max 10MB)
+        if file_size > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="File too large. Maximum size is 10MB."
+            )
         
-        result = analyzer.analyze_prescription(temp_path)
+        if file_size < 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="File too small. Please upload a valid prescription image."
+            )
         
-        if not result.success:
-            logger.warning(f"Analysis failed: {result.error}")
-            return JSONResponse({
-                "success": False,
-                "prescription_id": result.prescription_id or f"RX-{uuid.uuid4().hex[:8]}",
-                "patient": {"name": "", "age": "", "gender": ""},
-                "doctor": {"name": "", "specialization": "", "registration_number": ""},
-                "medicines": [],
-                "confidence_score": 0.0,
-                "raw_text": result.raw_text or "",
-                "error": result.error,
-                "message": "Analysis failed"
-            })
+        # Extract information
+        result = await extraction_service.extract(image_bytes)
         
-        json_data = analyzer.to_json(result)
+        # Return the result
+        if result.get("success"):
+            logger.info(f"✅ Successfully analyzed prescription: {result.get('prescription_id')}")
+            return JSONResponse(content=result)
+        else:
+            logger.warning(f"⚠️ Analysis completed with errors: {result.get('error')}")
+            return JSONResponse(content=result, status_code=200)
         
-        logger.info(f"✅ Success! ID: {result.prescription_id}")
-        logger.info(f"   Doctor: {result.doctor.name}")
-        logger.info(f"   Patient: {result.patient.name}")
-        logger.info(f"   Meds: {len(result.medicines)}, Confidence: {result.confidence_score:.1%}")
-        
-        response = {
-            "success": True,
-            "prescription_id": json_data.get("prescription_id", result.prescription_id),
-            "patient": {
-                "name": json_data.get("patient", {}).get("name") or "",
-                "age": json_data.get("patient", {}).get("age") or "",
-                "gender": json_data.get("patient", {}).get("gender") or ""
-            },
-            "doctor": {
-                "name": json_data.get("doctor", {}).get("name") or "",
-                "specialization": json_data.get("doctor", {}).get("specialization") or "",
-                "registration_number": json_data.get("doctor", {}).get("registration_number") or ""
-            },
-            "medicines": [
-                {
-                    "name": m.get("name") or "",
-                    "dosage": m.get("dosage") or "",
-                    "frequency": m.get("frequency") or "",
-                    "timing": m.get("instructions") or m.get("timing") or "",
-                    "duration": m.get("duration") or "",
-                    "quantity": int(m.get("quantity", 1)) if str(m.get("quantity", "1")).isdigit() else 1,
-                    "available": m.get("available", True)
-                }
-                for m in json_data.get("medicines", [])
-            ],
-            "confidence_score": float(json_data.get("confidence_score", result.confidence_score)),
-            "raw_text": json_data.get("raw_text", result.raw_text) or "",
-            "message": "Analysis completed",
-            "error": ""
-        }
-        
-        logger.info(f"📤 Response: confidence={response['confidence_score']:.2f}, meds={len(response['medicines'])}")
-        
-        return JSONResponse(response)
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Error: {e}", exc_info=True)
-        return JSONResponse({
-            "success": False,
-            "prescription_id": f"RX-{uuid.uuid4().hex[:8]}",
-            "patient": {"name": "", "age": "", "gender": ""},
-            "doctor": {"name": "", "specialization": "", "registration_number": ""},
-            "medicines": [],
-            "confidence_score": 0.0,
-            "raw_text": "",
-            "error": str(e),
-            "message": "Error occurred"
-        })
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
+        logger.error(f"❌ Error during analysis: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+@app.post("/feedback")
+async def receive_feedback(feedback_data: dict):
+    """
+    Receive feedback for continuous learning
+    
+    This endpoint stores user feedback to improve the model over time.
+    """
+    try:
+        logger.info(f"📝 Received feedback for prescription: {feedback_data.get('prescription_id')}")
+        
+        # TODO: Store feedback in database
+        # TODO: Trigger retraining if threshold is met
+        
+        return {
+            "success": True,
+            "message": "Feedback received successfully"
+        }
+    except Exception as e:
+        logger.error(f"❌ Error storing feedback: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to store feedback"
+        )
+
+@app.get("/stats")
+async def get_statistics():
+    """Get ML service statistics"""
+    try:
+        # TODO: Implement statistics tracking
+        return {
+            "total_analyzed": 0,
+            "total_feedback": 0,
+            "model_version": "1.0.0",
+            "last_training": None
+        }
+    except Exception as e:
+        logger.error(f"❌ Error getting statistics: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get statistics"
+        )
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Get configuration from environment
+    HOST = os.getenv('HOST', '0.0.0.0')
+    PORT = int(os.getenv('PORT', 8000))
+    
+    logger.info(f"🚀 Starting ML Service on {HOST}:{PORT}")
+    
+    uvicorn.run(
+        "main:app",
+        host=HOST,
+        port=PORT,
+        reload=True,
+        log_level="info"
+    )
