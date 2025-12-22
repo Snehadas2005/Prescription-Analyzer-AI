@@ -79,24 +79,84 @@ async def analyze_prescription_internal(file: UploadFile):
     if not extraction_service:
         raise HTTPException(503, "Service not ready")
     
-    if not file.content_type or not file.content_type.startswith('image/'):
-        raise HTTPException(400, "Invalid file type. Please upload an image.")
+    # FIXED: More lenient content type checking
+    # Accept any image type or if content_type is not set
+    valid_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/tiff', 'image/bmp', 'image/webp']
+    
+    # Log the received content type for debugging
+    logger.info(f"📥 Received file: {file.filename}")
+    logger.info(f"📋 Content-Type: {file.content_type}")
+    
+    # Check if it's a valid image based on extension if content_type is missing or invalid
+    if file.content_type and not file.content_type.startswith('image/'):
+        # Check file extension as fallback
+        valid_extensions = ['.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.webp']
+        has_valid_extension = any(file.filename.lower().endswith(ext) for ext in valid_extensions)
+        
+        if not has_valid_extension:
+            logger.error(f"❌ Invalid file type: {file.content_type}, filename: {file.filename}")
+            raise HTTPException(
+                400, 
+                f"Invalid file type. Received: {file.content_type}. Expected image file (JPEG, PNG, etc.)"
+            )
+        else:
+            logger.info(f"✓ Valid image extension detected: {file.filename}")
     
     try:
         image_bytes = await file.read()
+        file_size = len(image_bytes)
         
-        # Validate file size
-        if len(image_bytes) > 10 * 1024 * 1024:
+        logger.info(f"📦 File size: {file_size} bytes ({file_size / 1024:.2f} KB)")
+        
+        # Validate file size (max 10MB)
+        if file_size > 10 * 1024 * 1024:
             raise HTTPException(413, "File too large. Maximum size is 10MB.")
         
+        if file_size < 100:
+            raise HTTPException(400, "File too small. Please upload a valid image.")
+        
+        # Validate it's actually an image by checking magic bytes
+        if not _is_valid_image(image_bytes):
+            raise HTTPException(400, "Invalid image file. File may be corrupted.")
+        
+        logger.info("✓ File validation passed, starting analysis...")
         result = await extraction_service.extract(image_bytes)
+        
+        logger.info(f"✓ Analysis complete: success={result.get('success')}")
         return JSONResponse(content=result)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error: {e}", exc_info=True)
+        logger.error(f"❌ Analysis error: {e}", exc_info=True)
         raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+def _is_valid_image(data: bytes) -> bool:
+    """Check if file is a valid image by examining magic bytes"""
+    if len(data) < 12:
+        return False
+    
+    # Check for common image format signatures
+    signatures = [
+        b'\xFF\xD8\xFF',           # JPEG
+        b'\x89PNG\r\n\x1a\n',      # PNG
+        b'GIF87a',                 # GIF
+        b'GIF89a',                 # GIF
+        b'BM',                     # BMP
+        b'II\x2A\x00',             # TIFF (little endian)
+        b'MM\x00\x2A',             # TIFF (big endian)
+        b'RIFF',                   # WebP (check for WEBP after RIFF)
+    ]
+    
+    for sig in signatures:
+        if data.startswith(sig):
+            return True
+    
+    # Special check for WebP (RIFF....WEBP)
+    if data.startswith(b'RIFF') and b'WEBP' in data[:20]:
+        return True
+    
+    return False
 
 if __name__ == "__main__":
     import uvicorn
