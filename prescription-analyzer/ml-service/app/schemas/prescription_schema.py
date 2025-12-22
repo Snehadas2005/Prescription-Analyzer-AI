@@ -1,7 +1,6 @@
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
-
 class PrescriptionResponse(BaseModel):
     success: bool = Field(default=True)
     prescription_id: str

@@ -30,6 +30,7 @@ venv_trocr/
 env/
 ENV/
 .venv
+venv310
 
 # Distribution / packaging
 .Python
