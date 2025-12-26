@@ -13,7 +13,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
 from pathlib import Path
-from fuzzywuzzy import fuzz, process
+from thefuzz import fuzz, process
 from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)

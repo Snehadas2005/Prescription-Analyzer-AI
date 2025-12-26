@@ -8,14 +8,14 @@ echo "======================================================================"
 echo ""
 
 # Check for data folder
-if [ ! -d "data" ]; then
+if [ ! -d "../data" ]; then
     echo "❌ Error: data/prescriptions folder not found"
     echo "Please create it and add 142 prescription images"
     exit 1
 fi
 
 # Count images
-image_count=$(find data -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | wc -l)
+image_count=$(find ../data -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | wc -l)
 echo "Found $image_count prescription images"
 
 if [ $image_count -lt 10 ]; then
@@ -25,7 +25,7 @@ fi
 
 # Activate virtual environment
 if [ -d "venv312" ]; then
-    source venv312/bin/activate || source venv312/Scripts/activate
+    source venv312/Scripts/activate
 else
     echo "❌ Virtual environment not found"
     exit 1

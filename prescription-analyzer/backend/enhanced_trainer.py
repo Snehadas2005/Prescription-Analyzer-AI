@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class SelfLearningTrainer:
 
-    def __init__(self, data_folder: str = "data/prescriptions"):
+    def __init__(self, data_folder: str = "../data/prescriptions"):
         self.data_folder = Path(data_folder)
         self.models_folder = Path("models/trained")
         self.models_folder.mkdir(parents=True, exist_ok=True)
@@ -329,7 +329,7 @@ def main():
     print()
     
     # Check for data folder
-    data_folder = Path("data/prescriptions")
+    data_folder = Path("../data/prescriptions")
     if not data_folder.exists():
         print(f"❌ Data folder not found: {data_folder}")
         print(f"Please create the folder and add prescription images")
