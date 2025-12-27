@@ -16,6 +16,7 @@ secrets.json
 backend/integration/keys.py
 verify.go
 
+
 # ===== Python =====
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -238,3 +239,9 @@ backend/integration/keys.py
 *.onnx
 *.h5
 *.hdf5
+
+# Ignore all image files inside data/prescrptions
+data/prescrptions/*.png
+data/prescrptions/*.jpg
+data/prescrptions/*.jpeg
+data/
