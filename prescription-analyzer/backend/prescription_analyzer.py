@@ -64,10 +64,6 @@ class AnalysisResult:
 
 
 class EnhancedPrescriptionAnalyzer:
-    """
-    Self-learning analyzer with 99% confidence target
-    """
-    
     def __init__(self, cohere_api_key: str = None, force_api: bool = False):
         logger.info("Initializing Enhanced Prescription Analyzer v2.0...")
         
@@ -123,9 +119,6 @@ class EnhancedPrescriptionAnalyzer:
         }
     
     def analyze_prescription(self, image_path: str) -> AnalysisResult:
-        """
-        Analyze prescription with enhanced confidence
-        """
         prescription_id = f"RX-{uuid.uuid4().hex[:8].upper()}"
         
         try:

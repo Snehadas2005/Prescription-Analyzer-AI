@@ -47,10 +47,6 @@ fi
 echo -e "${GREEN}✓ Running from correct directory${NC}"
 echo ""
 
-# ============================================================================
-# Step 1: Setup Python Virtual Environment
-# ============================================================================
-
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Step 1: Setting up Python Virtual Environment${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -62,7 +58,6 @@ if [ ! -d "venv312" ]; then
     $PYTHON_CMD -m venv venv312
 fi
 
-# Activate virtual environment
 if [ "$IS_WINDOWS" = true ]; then
     source venv312/Scripts/activate 2>/dev/null || . venv312/Scripts/activate
 else
@@ -71,22 +66,16 @@ fi
 
 echo -e "${GREEN}✓ Virtual environment activated${NC}"
 
-# Upgrade pip
 echo -e "${YELLOW}Upgrading pip...${NC}"
 pip install --quiet --upgrade pip setuptools wheel
 
 echo -e "${GREEN}✓ Pip upgraded${NC}"
 echo ""
 
-# ============================================================================
-# Step 2: Install Dependencies
-# ============================================================================
-
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Step 2: Installing Python Dependencies${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 
-# Create a minimal requirements file
 cat > temp_requirements.txt << 'EOF'
 # Core dependencies
 fastapi==0.104.1
@@ -116,7 +105,6 @@ EOF
 echo -e "${YELLOW}Installing core dependencies...${NC}"
 pip install --quiet -r temp_requirements.txt
 
-# Install spaCy model
 echo -e "${YELLOW}Installing spaCy model...${NC}"
 $PYTHON_CMD -m spacy download en_core_web_sm --quiet
 
@@ -124,10 +112,6 @@ rm temp_requirements.txt
 
 echo -e "${GREEN}✓ All dependencies installed${NC}"
 echo ""
-
-# ============================================================================
-# Step 3: Verify prescription_analyzer.py exists
-# ============================================================================
 
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Step 3: Verifying backend/prescription_analyzer.py${NC}"
@@ -149,11 +133,6 @@ else
 fi
 
 echo ""
-
-# ============================================================================
-# Step 4: Fix ML Service Files
-# ============================================================================
-
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Step 4: Creating/Fixing ML Service Files${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -480,10 +459,6 @@ cd ..
 
 echo ""
 
-# ============================================================================
-# Step 5: Test Import
-# ============================================================================
-
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Step 5: Testing Python Import${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -539,10 +514,6 @@ else
 fi
 
 echo ""
-
-# ============================================================================
-# Summary
-# ============================================================================
 
 echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                                ║${NC}"
