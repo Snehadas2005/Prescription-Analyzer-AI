@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"prescription-analyzer/backend/internal/database"
-	"prescription-analyzer/backend/internal/handlers"
+	"prescription-analyzer-ai/internal/database"
+	"prescription-analyzer-ai/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 )
