@@ -193,9 +193,11 @@ async def get_statistics():
         )
 
 if __name__ == "__main__":
-    # Get configuration from environment
-    HOST = os.getenv('HOST', '0.0.0.0')
+    import uvicorn
+    
+    # Get PORT from environment (Railway sets this)
     PORT = int(os.getenv('PORT', 8000))
+    HOST = os.getenv('HOST', '0.0.0.0')
     
     logger.info(f"🚀 Starting ML Service on {HOST}:{PORT}")
     
@@ -203,6 +205,6 @@ if __name__ == "__main__":
         "main:app",
         host=HOST,
         port=PORT,
-        reload=True,
+        reload=False,  # Disable reload in production
         log_level="info"
     )
