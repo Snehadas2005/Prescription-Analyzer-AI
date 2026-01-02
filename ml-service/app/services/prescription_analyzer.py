@@ -90,7 +90,7 @@ class EnhancedPrescriptionAnalyzer:
             ],
             'registration': [
                 r'\b(Reg\.?\s*No\.?|Registration\s+No\.?|License\s+No\.?|Medical\s+License)\s*:?\s*([A-Z0-9]+)',
-                r'\b([A-Z]{2,4}[-/]?\d{4,6})\b'
+                r'\b([A-Z]{0,4}[-/]?\d{3,10})\b'
             ]
         }
         
@@ -184,6 +184,7 @@ class EnhancedPrescriptionAnalyzer:
             'ciprofloxacin': {'category': 'antibiotic', 'generic': 'ciprofloxacin', 'available': True},
             'cephalexin': {'category': 'antibiotic', 'generic': 'cephalexin', 'available': True},
             'doxycycline': {'category': 'antibiotic', 'generic': 'doxycycline', 'available': True},
+            'clarithromycin': {'category': 'antibiotic', 'generic': 'clarithromycin', 'available': True},
             
             # Pain relievers
             'paracetamol': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
@@ -191,20 +192,37 @@ class EnhancedPrescriptionAnalyzer:
             'ibuprofen': {'category': 'nsaid', 'generic': 'ibuprofen', 'available': True},
             'diclofenac': {'category': 'nsaid', 'generic': 'diclofenac', 'available': True},
             'aspirin': {'category': 'nsaid', 'generic': 'aspirin', 'available': True},
+            'naproxen': {'category': 'nsaid', 'generic': 'naproxen', 'available': True},
             
             # PPIs and antacids
             'esomeprazole': {'category': 'ppi', 'generic': 'esomeprazole', 'available': True},
             'omeprazole': {'category': 'ppi', 'generic': 'omeprazole', 'available': True},
             'pantoprazole': {'category': 'ppi', 'generic': 'pantoprazole', 'available': True},
+            'lansoprazole': {'category': 'ppi', 'generic': 'lansoprazole', 'available': True},
+            'ranitidine': {'category': 'h2_blocker', 'generic': 'ranitidine', 'available': False},
             
             # Antihistamines
             'cetirizine': {'category': 'antihistamine', 'generic': 'cetirizine', 'available': True},
             'loratadine': {'category': 'antihistamine', 'generic': 'loratadine', 'available': True},
+            'fexofenadine': {'category': 'antihistamine', 'generic': 'fexofenadine', 'available': True},
             
-            # Common Indian medicines
+            # Common Indian medicines from prescriptions
+            'gan vi': {'category': 'ayurvedic', 'generic': 'herbal supplement', 'available': True},
             'crocin': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
             'combiflam': {'category': 'analgesic', 'generic': 'ibuprofen + paracetamol', 'available': True},
             'dolo': {'category': 'analgesic', 'generic': 'paracetamol', 'available': True},
+            'volini': {'category': 'topical', 'generic': 'topical analgesic', 'available': True},
+            
+            # Diabetes medications
+            'metformin': {'category': 'antidiabetic', 'generic': 'metformin', 'available': True},
+            'insulin': {'category': 'antidiabetic', 'generic': 'insulin', 'available': True},
+            'glimepiride': {'category': 'antidiabetic', 'generic': 'glimepiride', 'available': True},
+            
+            # Vitamins and supplements
+            'vitamin d3': {'category': 'vitamin', 'generic': 'cholecalciferol', 'available': True},
+            'vitamin b12': {'category': 'vitamin', 'generic': 'cyanocobalamin', 'available': True},
+            'iron': {'category': 'mineral', 'generic': 'ferrous sulfate', 'available': True},
+            'calcium': {'category': 'mineral', 'generic': 'calcium carbonate', 'available': True}
         }
 
     def preprocess_image(self, image_path: str) -> List[np.ndarray]:
@@ -238,10 +256,13 @@ class EnhancedPrescriptionAnalyzer:
 
             processed_images = []
 
+            # Method 0: Original Grayscale (Resized) - GREAT FOR EasyOCR
+            processed_images.append(gray)
+
             # Method 1: CLAHE + Adaptive Threshold
             try:
                 clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-                contrast_enhanced = clahe.apply(gray)  # gray is already grayscale
+                contrast_enhanced = clahe.apply(gray)
                 denoised = cv2.bilateralFilter(contrast_enhanced, 9, 75, 75)
                 adaptive_thresh = cv2.adaptiveThreshold(
                     denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
@@ -251,27 +272,15 @@ class EnhancedPrescriptionAnalyzer:
             except Exception as e:
                 logger.warning(f"Method 1 preprocessing failed: {e}")
 
-            # Method 2: Otsu's Thresholding
+            # Method 2: Denoised + Otsu's (Good for Tesseract)
             try:
-                blur = cv2.GaussianBlur(gray, (3,3), 0)  # gray is already grayscale
-                _, otsu_thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+                _, otsu_thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                 processed_images.append(otsu_thresh)
-                logger.info("✓ Method 2 (Otsu) preprocessing successful")
+                logger.info("✓ Method 2 (Denoised Otsu) preprocessing successful")
             except Exception as e:
                 logger.warning(f"Method 2 preprocessing failed: {e}")
 
-            # Method 3: Simple binary threshold (fallback)
-            try:
-                _, simple_thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-                processed_images.append(simple_thresh)
-                logger.info("✓ Method 3 (Simple threshold) preprocessing successful")
-            except Exception as e:
-                logger.warning(f"Method 3 preprocessing failed: {e}")
-
-            if not processed_images:
-                logger.warning("All preprocessing methods failed, using original grayscale")
-                return [gray]
-            
             return processed_images
 
         except Exception as e:
@@ -591,27 +600,116 @@ class EnhancedPrescriptionAnalyzer:
         
         return True
 
+    def _extract_with_llm(self, text: str) -> Dict:
+        """Use Cohere LLM to parse extracted text for medical information"""
+        if not self.co:
+            logger.warning("Cohere client not initialized, skipping LLM extraction")
+            return None
+
+        prompt = f"""
+        Extract medical information from the following OCR text of a doctor's prescription.
+        The text contains a mix of printed headers and MESSY HANDWRITTEN parts (diagnosis, symptoms, and medicines).
+        
+        Focus intensely on identifying:
+        1. Symptoms/Complaints (e.g., "Cough", "Cold", "Fever", "Pain")
+        2. Diagnosis (the medical condition)
+        3. Medicines with their dosage and frequency.
+
+        Return the result ONLY as a JSON object with these keys:
+        - patient: {{name, age, gender}}
+        - doctor: {{name, specialization, registration_number}}
+        - medicines: [{{name, dosage, frequency, duration, instructions}}]
+        - diagnosis: [string] (include symptoms and complaints here)
+
+        Rules:
+        1. "C/o" or "c/o" means "Complaints of". Include whatever follows in 'diagnosis'.
+        2. If a field is not found, use an empty string.
+        3. Frequencies like "1-0-1" mean "Twice daily", "1-1-1" mean "Three times daily".
+        4. "bd" = Twice daily, "od" = Once daily, "tid" = Three times daily, "sos" = As needed.
+
+        OCR Text:
+        ---
+        {text}
+        ---
+        """
+
+        try:
+            response = self.co.chat(
+                model='command-r',
+                message=prompt,
+                temperature=0.3
+            )
+
+            raw_text = response.text.strip()
+            
+            # Remove markdown code blocks if present
+            if raw_text.startswith("```"):
+                raw_text = re.sub(r'^```json\s*|\n*```$', '', raw_text, flags=re.MULTILINE).strip()
+            
+            # Find the first { and last } to handle any weird prefixes/suffixes
+            start = raw_text.find('{')
+            end = raw_text.rfind('}')
+            
+            if start != -1 and end != -1:
+                json_data = json.loads(raw_text[start:end+1])
+                logger.info("✓ Successfully parsed LLM extraction from chat response")
+                return json_data
+            
+        except Exception as e:
+            logger.error(f"LLM extraction failed: {e}")
+            if 'raw_text' in locals():
+                logger.error(f"Raw text was: {raw_text}")
+        
+        return None
+
+    def _update_knowledge_base(self, extracted_data: Dict):
+        """Self-learning: Add new information to the knowledge base"""
+        if not extracted_data:
+            return
+
+        # Handle feedback nested structure or direct structure
+        data_to_process = extracted_data.get('corrections', extracted_data)
+        
+        updated = False
+        
+        # Update medicines
+        if 'medicines' in data_to_process:
+            for med in data_to_process['medicines']:
+                name = med.get('name', '').lower().strip()
+                if name and name not in self.medicine_database:
+                    self.medicine_database[name] = {
+                        'category': 'learned',
+                        'generic': '',
+                        'available': True,
+                        'last_seen': datetime.now().isoformat()
+                    }
+                    updated = True
+                    logger.info(f"✨ Learned new medicine: {name}")
+
+        if updated:
+            self._save_medicine_database()
+
     def _calculate_confidence(self, ocr_confidence: float, medicines_count: int, 
-                            patient: Patient, doctor: Doctor) -> float:
+                            patient: Patient, doctor: Doctor, used_llm: bool = False) -> float:
         """Calculate overall confidence score"""
-        weights = {'ocr': 0.3, 'medicines': 0.3, 'patient_info': 0.2, 'doctor_info': 0.2}
+        # If LLM was used successfully, it significantly boosts confidence for medical entities
+        llm_boost = 0.2 if used_llm else 0.0
+        
+        weights = {'ocr': 0.2, 'medicines': 0.4, 'patient_info': 0.2, 'doctor_info': 0.2}
         
         medicine_score = 0.0
         if medicines_count > 0:
-            medicine_score = min(1.0, medicines_count / 3.0)
-            medicine_score = min(1.0, medicine_score + 0.3)
+            medicine_score = min(1.0, (medicines_count / 3.0) + 0.4)
         
         patient_score = 0.0
         if patient.name: patient_score += 0.5
         if patient.age: patient_score += 0.25
         if patient.gender: patient_score += 0.25
-        patient_score = min(1.0, patient_score)
         
         doctor_score = 0.0
         if doctor.name: doctor_score += 0.6
         if doctor.specialization: doctor_score += 0.2
         if doctor.registration_number: doctor_score += 0.2
-        doctor_score = min(1.0, doctor_score)
         
         total_score = (
             weights['ocr'] * ocr_confidence +
@@ -620,7 +718,7 @@ class EnhancedPrescriptionAnalyzer:
             weights['doctor_info'] * doctor_score
         )
         
-        return min(1.0, max(0.0, total_score))
+        return min(0.99, max(0.0, total_score + llm_boost)) if total_score > 0 else 0.0
 
     def analyze_prescription(self, image_path: str) -> AnalysisResult:
         """
@@ -656,33 +754,62 @@ class EnhancedPrescriptionAnalyzer:
             # Clean text
             cleaned_text = self._clean_text(extracted_text)
             
-            # Extract doctor and patient info
+            # Extract doctor and patient info (Pattern matching as fallback/initial)
             doctor_info, patient_info = self.extract_doctor_patient_info(cleaned_text)
+            medicines = self._extract_medicines_simple(cleaned_text)
             
-            # Create patient object
+            used_llm = False
+            llm_data = self._extract_with_llm(cleaned_text)
+            
+            if llm_data:
+                used_llm = True
+                # Merge LLM data with pattern matching data
+                if llm_data.get('patient'):
+                    p = llm_data['patient']
+                    if p.get('name'): patient_info['name'] = p['name']
+                    if p.get('age'): patient_info['age'] = p['age']
+                    if p.get('gender'): patient_info['gender'] = p['gender']
+                
+                if llm_data.get('doctor'):
+                    d = llm_data['doctor']
+                    if d.get('name'): doctor_info['name'] = d['name']
+                    if d.get('specialization'): doctor_info['specialization'] = d['specialization']
+                    if d.get('registration_number'): doctor_info['registration_number'] = d['registration_number']
+                
+                if llm_data.get('medicines'):
+                    llm_medicines = []
+                    for m in llm_data['medicines']:
+                        llm_medicines.append(Medicine(
+                            name=m.get('name', ''),
+                            dosage=m.get('dosage', ''),
+                            frequency=m.get('frequency', ''),
+                            duration=m.get('duration', ''),
+                            instructions=m.get('instructions', ''),
+                            available=self._check_availability(m.get('name', ''))
+                        ))
+                    if llm_medicines:
+                        medicines = llm_medicines
+                
+                # SELF-LEARN: Use this verified/parsed data to update knowledge base
+                self._update_knowledge_base(llm_data)
+
+            # Create final objects
             patient = Patient(
                 name=patient_info.get('name', ''),
                 age=patient_info.get('age', ''),
                 gender=patient_info.get('gender', '')
             )
             
-            # Create doctor object
             doctor = Doctor(
                 name=doctor_info.get('name', ''),
                 specialization=doctor_info.get('specialization', ''),
                 registration_number=doctor_info.get('registration_number', '')
             )
             
-            # Extract medicines
-            medicines = self._extract_medicines_simple(cleaned_text)
-            
             # Calculate confidence
-            confidence = self._calculate_confidence(ocr_confidence, len(medicines), patient, doctor)
+            confidence = self._calculate_confidence(ocr_confidence, len(medicines), patient, doctor, used_llm=used_llm)
             
             logger.info(f"✓ Analysis complete: {confidence:.2%} confidence")
-            logger.info(f"  Doctor: {doctor.name}")
-            logger.info(f"  Patient: {patient.name}")
-            logger.info(f"  Medicines: {len(medicines)}")
             
             # Create successful result
             return AnalysisResult(
@@ -690,7 +817,7 @@ class EnhancedPrescriptionAnalyzer:
                 patient=patient,
                 doctor=doctor,
                 medicines=medicines,
-                diagnosis=[],
+                diagnosis=llm_data.get('diagnosis', []) if llm_data else [],
                 confidence_score=confidence,
                 raw_text=cleaned_text,
                 success=True,

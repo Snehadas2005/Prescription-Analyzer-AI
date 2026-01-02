@@ -36,6 +36,7 @@ type Prescription struct {
 	Patient        PatientInfo        `json:"patient" bson:"patient"`
 	Doctor         DoctorInfo         `json:"doctor" bson:"doctor"`
 	Medicines      []Medicine         `json:"medicines" bson:"medicines"`
+	Diagnosis      []string           `json:"diagnosis" bson:"diagnosis"`
 	Confidence     float64            `json:"confidence" bson:"confidence"`
 	ImageURL       string             `json:"image_url" bson:"image_url"`
 	RawText        string             `json:"raw_text" bson:"raw_text"`
