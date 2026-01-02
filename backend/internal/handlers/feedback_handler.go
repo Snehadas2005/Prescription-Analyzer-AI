@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +16,8 @@ import (
 )
 
 type FeedbackHandler struct {
-	db *mongo.Database
+	db           *mongo.Database
+	mlServiceURL string
 }
 
 type Feedback struct {
@@ -26,7 +31,14 @@ type Feedback struct {
 }
 
 func NewFeedbackHandler(db *mongo.Database) *FeedbackHandler {
-	return &FeedbackHandler{db: db}
+	mlURL := os.Getenv("ML_SERVICE_URL")
+	if mlURL == "" {
+		mlURL = "http://localhost:8000"
+	}
+	return &FeedbackHandler{
+		db:           db,
+		mlServiceURL: mlURL,
+	}
 }
 
 func (h *FeedbackHandler) Submit(c *gin.Context) {
@@ -48,11 +60,45 @@ func (h *FeedbackHandler) Submit(c *gin.Context) {
 
 	feedback.ID = result.InsertedID.(primitive.ObjectID)
 
+	// Forward feedback to ML service for self-learning
+	go h.forwardToMLService(feedback)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    feedback,
-		"message": "Feedback received successfully",
+		"message": "Feedback received successfully. AI knowledge base update triggered.",
 	})
+}
+
+func (h *FeedbackHandler) forwardToMLService(feedback Feedback) {
+	jsonData, err := json.Marshal(feedback)
+	if err != nil {
+		log.Printf("❌ Failed to marshal feedback: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", h.mlServiceURL+"/feedback", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("❌ Failed to create feedback request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ Failed to forward feedback to ML service: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("⚠️ ML service returned error status for feedback: %d", resp.StatusCode)
+		return
+	}
+
+	log.Printf("✅ Feedback successfully forwarded to ML service for %s", feedback.PrescriptionID)
 }
 
 func (h *FeedbackHandler) GetFeedbackStats(c *gin.Context) {

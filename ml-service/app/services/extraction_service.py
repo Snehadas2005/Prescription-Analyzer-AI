@@ -7,15 +7,15 @@ import tempfile
 import logging
 
 # Add backend to Python path
+# Helper path to find keys if needed
 backend_path = Path(__file__).parent.parent.parent.parent / "backend"
-backend_path_str = str(backend_path.resolve())
 
-if backend_path_str not in sys.path:
-    sys.path.insert(0, backend_path_str)
-    print(f"✓ Added to Python path: {backend_path_str}")
-
-# Import the analyzer
+# Import the analyzer from the same directory
 try:
+    from .prescription_analyzer import EnhancedPrescriptionAnalyzer
+    print("✓ Successfully imported EnhancedPrescriptionAnalyzer from local directory")
+except (ImportError, ValueError):
+    # Fallback for running as a standalone script
     from prescription_analyzer import EnhancedPrescriptionAnalyzer
     print("✓ Successfully imported EnhancedPrescriptionAnalyzer")
 except ImportError as e:
@@ -146,6 +146,7 @@ class ExtractionService:
                     }
                     for med in result.medicines
                 ],
+                "diagnosis": result.diagnosis or [],
                 "confidence_score": float(result.confidence_score),
                 "raw_text": result.raw_text or "",
                 "message": "Analysis completed successfully" if has_data else "Analysis completed but no data extracted - check OCR",
