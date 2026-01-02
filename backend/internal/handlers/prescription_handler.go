@@ -22,6 +22,7 @@ type MLExtractionResult struct {
 	Patient         map[string]interface{}   `json:"patient"`
 	Doctor          map[string]interface{}   `json:"doctor"`
 	Medicines       []map[string]interface{} `json:"medicines"`
+	Diagnosis       []string                 `json:"diagnosis"`
 	ConfidenceScore float64                  `json:"confidence_score"`
 	RawText         string                   `json:"raw_text"`
 	Error           string                   `json:"error,omitempty"`
@@ -159,6 +160,7 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 		Patient:        convertPatientInfo(extractionResult.Patient),
 		Doctor:         convertDoctorInfo(extractionResult.Doctor),
 		Medicines:      convertMedicines(extractionResult.Medicines),
+		Diagnosis:      extractionResult.Diagnosis,
 		Confidence:     extractionResult.ConfidenceScore,
 		ImageURL:       imageURL,
 		RawText:        extractionResult.RawText,

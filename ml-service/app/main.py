@@ -74,6 +74,21 @@ async def analyze_prescription(file: UploadFile = File(...)):
     """Go backend compatible endpoint"""
     return await analyze_prescription_internal(file)
 
+@app.post("/feedback")
+async def provide_feedback(feedback: dict):
+    """Endpoint for providing feedback/corrections for self-learning"""
+    if not extraction_service:
+        raise HTTPException(503, "Service not ready")
+    
+    try:
+        # Update knowledge base with corrected data
+        extraction_service.analyzer._update_knowledge_base(feedback)
+        logger.info(f"✓ Feedback processed for prescription {feedback.get('prescription_id')}")
+        return {"success": True, "message": "Feedback received and learned"}
+    except Exception as e:
+        logger.error(f"❌ Feedback error: {e}")
+        raise HTTPException(500, f"Failed to process feedback: {str(e)}")
+
 async def analyze_prescription_internal(file: UploadFile):
     """Internal analysis function"""
     if not extraction_service:
