@@ -74,22 +74,22 @@ This document serves as a comprehensive log of the technical challenges faced an
 
 ---
 
-## 🔁 Architecture Refactor
+## Architecture Refactor
 
 **Problem**: ML service had a self-learning feedback loop — storing corrections, maintaining a knowledge base, retraining on user input.
 **Fix**: Ripped out the entire learning pipeline. Replaced with a fully stateless scan-only flow: upload → OCR → extract → return result. Nothing is stored between requests.
 
-## 🗑️ Dead Code & Files Cleanup
+## Dead Code & Files Cleanup
 
 **Problem**: Old files from the self-learning era still sitting in the project — `continuous_learner.py`, `training_service.py`, `medicine_database.pkl`, `models/` folder, stale `__pycache__` directories.
 **Fix**: Identified every file to delete and cleaned up the structure. The `.pkl` file was the stored knowledge base accumulating over time.
 
-## 🔌 Wrong Run Command
+## Wrong Run Command
 
 **Problem**: Running `python -m app.main_ml` threw `Could not import module "app.main"` because uvicorn always looks for `app.main`.
 **Fix**: Rename `main_ml.py` → `main.py` and always run via `uvicorn app.main:app`.
 
-## 💻 CPU Overload / Laptop Hanging
+## CPU Overload / Laptop Hanging
 
 **Problem**: A single prescription upload was spawning up to 12 OCR passes — 3 preprocessed image variants × EasyOCR + 3 Tesseract configs each. This pegged all cores to 800%+ CPU.
 **Fixes applied**:
@@ -101,12 +101,12 @@ This document serves as a comprehensive log of the technical challenges faced an
 *   Removed `fuzzywuzzy` fuzzy matching on every medicine line (replaced with plain dict lookup).
 *   `EasyOCR workers=0` to prevent subprocess forking.
 
-## 🤖 Cohere Model Removed (404 Error)
+## Cohere Model Removed (404 Error)
 
 **Problem**: Code was calling `model="command-r"` which Cohere retired on September 15, 2025. Every LLM call was returning 404.
 **Fix**: Updated to `model="command-r-plus-08-2024"`.
 
-## 📷 Poor OCR Quality on Handwriting (26% confidence)
+## Poor OCR Quality on Handwriting (26% confidence)
 
 **Problem**: Tesseract was scoring only 0.24 confidence on a real handwritten prescription.
 **Fixes**:
@@ -115,14 +115,14 @@ This document serves as a comprehensive log of the technical challenges faced an
 *   Adaptive threshold block size increased (11→31).
 *   PSM 11 fallback added — if PSM 6 scores below 0.40 confidence, automatically retries with sparse-text mode.
 
-## 🎨 Frontend Cleanup
+## Frontend Cleanup
 
 **Problem**: `App.jsx` had feedback/correction UI from the old self-learning system.
 **Fix**: Rewrote `App.jsx` as a clean scan-only UI: upload zone → loading spinner → results panel. No correction UI, no feedback submission.
 
 ---
 
-## 📊 Final Result Comparison
+## Final Result Comparison
 
 | Metric | Start | End |
 | :--- | :--- | :--- |

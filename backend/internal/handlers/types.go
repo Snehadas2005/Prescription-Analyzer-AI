@@ -69,11 +69,6 @@ type Medicine struct {
 	Quantity  int    `json:"quantity" bson:"quantity"`
 }
 
-// triggerLearningPipeline triggers the ML learning pipeline (placeholder)
-func (h *PrescriptionHandler) triggerLearningPipeline(prescription Prescription) {
-	// TODO: Implement learning pipeline trigger
-	// This would typically send data to a queue or trigger an async job
-}
 
 // Helper function to get environment variables
 func getEnv(key, fallback string) string {

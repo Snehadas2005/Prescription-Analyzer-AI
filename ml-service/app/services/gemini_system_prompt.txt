@@ -162,12 +162,12 @@ CRITICAL RULE: Always write the FULL human-readable label in the "frequency" fie
 NEVER return short codes like "bd" or "SOS" — ALWAYS expand them.
 
 SHORT CODE → FULL LABEL TO USE IN JSON:
-- od        → "Once daily"
-- bd / bid  → "Twice daily (Morning & Night)"
-- tid / tds → "Three times daily"
-- once      → "Once daily"
+- od  / OD / ods      → "Once daily"
+- bd / bid / BD / bds → "Twice daily (Morning & Night)"
+- tid / tds / TDS / tids → "Three times daily"
+- once / ONCE → "Once daily"
 - SOS / sos → "Take only during emergency (SOS)"
-- hs        → "At bedtime"
+- hs / HS → "At bedtime"
 - Two dots + line symbol   → "Twice daily (Morning & Night)"
 - Three dots + line symbol → "Three times daily"
 

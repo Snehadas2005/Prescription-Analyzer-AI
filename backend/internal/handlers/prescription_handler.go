@@ -186,7 +186,6 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	log.Printf("   Doctor: %s", prescription.Doctor.Name)
 	log.Printf("   Medicines: %d", len(prescription.Medicines))
 
-	go h.triggerLearningPipeline(prescription)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

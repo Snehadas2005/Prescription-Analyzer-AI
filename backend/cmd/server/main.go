@@ -25,7 +25,6 @@ func main() {
 
 	// Initialize handlers
 	prescriptionHandler := handlers.NewPrescriptionHandler(db)
-	feedbackHandler := handlers.NewFeedbackHandler(db)
 
 	// Setup router
 	r := gin.Default()
@@ -44,8 +43,6 @@ func main() {
 	{
 		api.POST("/upload", prescriptionHandler.Upload)
 		api.GET("/prescription/:id", prescriptionHandler.Get)
-		api.POST("/feedback", feedbackHandler.Submit)
-		api.GET("/feedback/stats", feedbackHandler.GetFeedbackStats)
 		api.GET("/history", prescriptionHandler.GetHistory)
 	}
 
