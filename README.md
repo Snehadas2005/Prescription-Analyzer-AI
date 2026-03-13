@@ -1,35 +1,123 @@
 # Prescription Analyzer AI
 
-An AI-powered system designed to analyze and extract information from digital and handwritten prescriptions. The project combines advanced OCR techniques with Biomedical Named Entity Recognition (NER) to provide accurate medical data extraction.
-
-## 🚀 Current Project Status
-
-The project is currently in an advanced development phase with core functionality established across the microservices architecture.
-
-### Key Achievements:
-- **TrOCR Integration**: Successfully integrated Microsoft's Transformer-based OCR (TrOCR) to handle complex handwritten text in prescriptions.
-- **Biomedical NER**: Implemented `d4data/biomedical-ner-all` for robust extraction of symptoms, medications, and dosages.
-- **Hybrid Backend**: Transitioned to a Go-based backend for efficient API handling while maintaining a specialized Python ML service.
-- **Data Persistence**: Integrated **MongoDB** with the Go driver for secure and scalable data storage.
-- **Improved UI**: Added **Pagination** and other navigational enhancements for better data management in the frontend.
-- **Microservices Architecture**: Separate services for Frontend (React), Backend (Go), and ML (Python) are communicating effectively.
-- **Cloud Deployment Ready**: Configuration complete for Railway (Backend/ML) and Vercel (Frontend).
-
-## 🎯 Next Focus Areas
-
-1.  **Confidence Rate Optimization**: Improving the model's confidence scores for highly illegible handwriting.
-2.  **Dataset Expansion**: Further training/fine-tuning TrOCR on a broader set of medical prescription imagery.
-3.  **Advanced UI/UX**: Enhancing the frontend to handle and visualize complex analysis results (e.g., medicine interactions, dosage warnings).
-4.  **Performance Tuning**: Optimizing the latency between the Go backend and Python ML service.
-
-## 🏗️ Tech Stack
-
-- **Frontend**: React 18
-- **Backend**: Go (Golang)
-- **ML Service**: Python (FastAPI/HuggingFace Transformers)
-- **Models**: TrOCR, d4data/biomedical-ner-all
-- **Deployment**: Railway, Vercel
-- **Database**: MongoDB (Go Driver integrated)
+A high-performance AI-powered system designed to analyze and extract information from handwritten and digital prescriptions. Utilizing **Gemini 2.0 Flash Vision**, this system achieves near-human accuracy in reading complex multi-line handwritten medical data.
 
 ---
-*For a detailed history of challenges and how they were overcome, see [ISSUES_RESOLVED.md](./ISSUES_RESOLVED.md).*
+
+## 🚀 System Architecture
+
+The project is built on a high-efficiency microservices architecture, ensuring scalability and separation of concerns.
+
+```mermaid
+graph TD
+    A[Frontend: React/GSAP] -->|Upload Image| B[Backend: Go/Gin]
+    B -->|Proxy Request| C[ML Service: Python/FastAPI]
+    C -->|Vision Analysis| D[Gemini 2.0 Flash]
+    D -->|JSON Result| C
+    C -->|Extracted Data| B
+    B -->|Save History| E[(MongoDB)]
+    B -->|Final Response| A
+```
+
+- **Frontend**: A modern, premium React interface utilizing GSAP & Framer Motion for smooth, high-end animations.
+- **Backend (Orchestration)**: A high-concurrency Go API that handles authentication, database logic, and proxies data to the ML engine.
+- **ML Service (Inference)**: A stateless FastAPI service dedicated to OCR and LLM-based extraction. It uses advanced image preprocessing and the Gemini Flash Vision API.
+- **Database**: MongoDB for secure, persistence of prescription history and metadata.
+
+---
+
+## 🌟 Key Features
+
+- **🎯 Industrial-Grade Extraction**: Precisely extracts patient demographics, doctor metadata, clinical diagnosis, and full medication tables.
+- **✍️ Handwriting Intelligence**: Specifically engineered for the nuances of Indian medical handwriting, supporting shorthand like `bd`, `od`, `TDS`, `SOS`, and symbolic dot-line frequencies.
+- **⚡ Stateless & Secure**: Designed for privacy with a stateless flow—images are processed and discarded immediately after extraction.
+- **📊 Real-time Confidence**: Every result is accompanied by an AI confidence score, ensuring clinicians can verify results with transparency.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, GSAP, Framer Motion, Tailwind CSS (Design Tokens), Lucide Icons |
+| **Backend** | Go (Golang), Gin Gonic, MongoDB Driver |
+| **ML Engine** | Python 3.10+, FastAPI, google-genai, OpenCV, Pytesseract |
+| **Model** | Gemini 2.0 Flash Vision (Primary), Cohere Command-R Plus (Secondary) |
+| **Infrastructure** | Docker, Railway.app, Vercel |
+
+---
+
+## 📂 Project Structure
+
+```bash
+├── frontend/             # React application (Vite-based)
+├── backend/              # Go API (Service orchestration)
+│   ├── cmd/server/       # Entry point
+│   ├── internal/         # Business logic & Handlers
+├── ml-service/           # Python ML service
+│   ├── app/main.py       # FastAPI entry point
+│   ├── app/services/     # Extraction & OCR logic
+└── ISSUES_RESOLVED.md    # Detailed technical journal
+```
+
+---
+
+## ⚙️ Quick Setup
+
+### 1. Requirements
+- Node.js 18+
+- Go 1.21+
+- Python 3.10+
+- MongoDB Instance
+
+### 2. Configuration
+Create a `.env` file in the root directory:
+```env
+# ML Service
+GEMINI_API_KEY=your_gemini_key
+COHERE_API_KEY=your_cohere_key
+
+# Backend
+MONGODB_URI=your_mongodb_connection_string
+PORT=8080
+
+# Frontend
+VITE_API_URL=http://localhost:8080
+```
+
+### 3. Run Locally
+**ML Service:**
+```bash
+cd ml-service
+pip install -r requirements.txt
+python -m uvicorn app.main:app --port 8000
+```
+
+**Backend:**
+```bash
+cd backend
+go run cmd/server/main.go
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 🔮 Future Roadmap
+
+1.  **♿ Accessibility First**: Implementation of Text-to-Speech (TTS) for automatic dosage reading.
+2.  **🎨 Color Assist**: High-contrast and color-blind optimized UI themes.
+3.  **🇮🇳 Polyglot Extraction**: Support for regional Indian scripts (Hindi, Bengali, etc.) in handwriting.
+4.  **🏥 Safety Layer**: Real-time checking for drug-to-drug interactions (DDIs).
+5.  **📱 Ecosystem Sync**: Integration with HealthStacks (Apple Health / Google Fit).
+
+---
+
+## 📜 License & Acknowledgments
+Developed by **Sneha Das**.  
+*For a detailed history of technical challenges and solutions, see [ISSUES_RESOLVED.md](./ISSUES_RESOLVED.md).*
