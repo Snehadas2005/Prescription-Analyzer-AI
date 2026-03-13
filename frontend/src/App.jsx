@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Upload, User, Pill, Activity, Stethoscope, FileText,
-  ShieldCheck, Zap, Volume2, VolumeX, Globe, ChevronDown, X, AlertCircle, Languages
+  ShieldCheck, Zap, Volume2, VolumeX, Globe, ChevronDown, X, AlertCircle, Languages, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
@@ -36,6 +36,8 @@ const UI_STRINGS = {
     rawText: 'Raw OCR Text', readAloud: 'Read Aloud', stop: 'Stop',
     detected: (l) => `${LANGS[l]?.flag || ''} ${LANGS[l]?.label || l} script detected`,
     footer: '© 2026 VaidyaScan — Developed by Sneha Das · Powered by Gemini Vision',
+    translating: 'Translating to Hindi…',
+    translatingSub: 'Gemini is converting all extracted data to Hindi',
   },
   hi: {
     badge: 'जेमिनी 2.0 फ्लैश विज़न · हिंदी + अंग्रेज़ी',
@@ -62,6 +64,8 @@ const UI_STRINGS = {
     rawText: 'OCR टेक्स्ट', readAloud: 'आवाज़ में सुनें', stop: 'रोकें',
     detected: (l) => `${LANGS[l]?.flag || ''} ${LANGS[l]?.label || l} लिपि पहचानी गई`,
     footer: '© 2026 VaidyaScan — स्नेहा दास द्वारा विकसित · जेमिनी विज़न द्वारा संचालित',
+    translating: 'हिंदी में अनुवाद हो रहा है…',
+    translatingSub: 'जेमिनी सभी निकाले गए डेटा को हिंदी में बदल रहा है',
   },
 };
 
@@ -71,6 +75,53 @@ const S = (lang, key, ...args) => {
   if (typeof val === 'function') return val(...args);
   return val ?? key;
 };
+
+// ── Gemini-powered Hindi translation ──────────────────────────────────────
+async function translateResultToHindi(result) {
+  const payload = {
+    patient: result.patient,
+    doctor: result.doctor,
+    medicines: result.medicines,
+    diagnosis: result.diagnosis,
+  };
+
+  const prompt = `You are a medical translator. Translate this JSON prescription data into Hindi (Devanagari script).
+
+Rules:
+- Patient/doctor names → Hindi phonetic (e.g. "Banani" → "बनानी", "Sunita Mehta" → "सुनीता मेहता")
+- Specialization → Hindi (e.g. "OBSTETRICIAN & GYNAECOLOGIST" → "प्रसूति एवं स्त्री रोग विशेषज्ञ")
+- Medicine names → Hindi phonetic (e.g. "Augmentin" → "ऑगमेंटिन", "Bifilac" → "बिफिलैक", "Emanzen" → "एमैन्ज़ेन")
+- Dosage terms: "As prescribed" → "यथा निर्धारित", "As directed" → "यथा निर्देशित"
+- Frequency: "Once daily" → "दिन में एक बार", "Twice daily (Morning & Night)" → "दिन में दो बार (सुबह और रात)", "Three times daily" → "दिन में तीन बार", "Take only during emergency (SOS)" → "आवश्यकता पड़ने पर ही लें (SOS)", "At bedtime" → "सोने से पहले"
+- Duration: "2 weeks" → "2 सप्ताह", "As prescribed" → "यथा निर्धारित"
+- Timing: "Before meals" → "भोजन से पहले", "After meals" → "भोजन बाद"
+- Diagnosis: "Pain Vagina" → "योनि में दर्द", "Cold" → "सर्दी-ज़ुकाम", "Fever" → "बुखार"
+- Gender: "Female" → "महिला", "Male" → "पुरुष"
+- Keep registration numbers and numeric values exactly as-is
+- Return ONLY valid JSON
+
+Input: ${JSON.stringify(payload)}`;
+
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_KEY";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    }),
+  });
+
+  if (!response.ok) throw new Error('Gemini Translation failed');
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('No translation text returned');
+  
+  const translated = JSON.parse(text);
+  return { ...result, ...translated };
+}
 
 const speak = (text, ttsCode = 'en-US') => {
   if (!('speechSynthesis' in window)) return;
@@ -291,7 +342,10 @@ export default function App() {
   const [file, setFile]           = useState(null);
   const [preview, setPreview]     = useState(null);
   const [phase, setPhase]         = useState('upload');
-  const [result, setResult]       = useState(null);
+  const [rawResult, setRawResult]         = useState(null);
+  const [displayResult, setDisplayResult] = useState(null);
+  const [translating, setTranslating]     = useState(false);
+  const translationCache                  = useRef({});
   const [error, setError]         = useState(null);
   const [lang, setLang]           = useState('en');   
   const [prescLang, setPrescLang] = useState(null);   
@@ -301,6 +355,7 @@ export default function App() {
   const API_URL   = `${import.meta.env.VITE_API_URL}/api/v1`;
 
   const s = (key, ...args) => S(lang, key, ...args);
+  const currentResult = displayResult || rawResult;
 
   useEffect(() => {
     if (!headerRef.current) return;
@@ -318,15 +373,40 @@ export default function App() {
     );
   }, [phase]);
 
+  useEffect(() => {
+    if (!rawResult || phase !== 'results') return;
+
+    if (lang === 'en') {
+      setDisplayResult(rawResult);
+      return;
+    }
+
+    if (lang === 'hi') {
+      if (translationCache.current.hi) {
+        setDisplayResult(translationCache.current.hi);
+        return;
+      }
+      setTranslating(true);
+      translateResultToHindi(rawResult)
+        .then(translated => {
+          translationCache.current.hi = translated;
+          setDisplayResult(translated);
+        })
+        .catch(() => setDisplayResult(rawResult))
+        .finally(() => setTranslating(false));
+    }
+  }, [lang, rawResult, phase]);
+
   const handleFile = useCallback((f) => {
-    setFile(f); setError(null); setResult(null);
+    setFile(f); setError(null); setRawResult(null); setDisplayResult(null);
     const reader = new FileReader();
     reader.onloadend = () => setPreview(reader.result);
     reader.readAsDataURL(f);
   }, []);
 
   const reset = () => {
-    setFile(null); setPreview(null); setResult(null);
+    setFile(null); setPreview(null); setRawResult(null); setDisplayResult(null);
+    translationCache.current = {};
     setError(null); setPrescLang(null); setPhase('upload');
     stopSpeaking();
   };
@@ -343,7 +423,9 @@ export default function App() {
       const data = json.data || json;
       if (json.success) {
         setPrescLang(data.detected_language || 'en');
-        setResult(data);
+        setRawResult(data);
+        setDisplayResult(data);
+        translationCache.current = {};
         setTimeout(() => setPhase('results'), 800);
       } else {
         setError(json.error || 'Analysis failed');
@@ -473,8 +555,26 @@ export default function App() {
           )}
 
           {/* ── RESULTS ── */}
-          {phase === 'results' && result && (
+          {phase === 'results' && currentResult && (
             <motion.div key="results" initial={{ opacity:0, y:30 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.5 }}>
+
+              {translating && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  style={{
+                    position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.85)',
+                    backdropFilter: 'blur(8px)', zIndex: 200,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', gap: '16px'
+                  }}>
+                  <Loader2 size={40} color="var(--dark)" style={{ animation: 'spin 1s linear infinite' }}/>
+                  <h3 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--dark)' }}>
+                    {s('translating')}
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>
+                    {s('translatingSub')}
+                  </p>
+                </motion.div>
+              )}
 
               {/* Top bar */}
               <div className="results-header-bar">
@@ -483,7 +583,7 @@ export default function App() {
                   <span style={{ fontWeight:'700', color:'var(--dark)' }}>{s('done')}</span>
                 </div>
                 <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', alignItems: 'center' }}>
-                  <TTSButton result={result} lang={lang}/>
+                  <TTSButton result={currentResult} lang={lang}/>
                   <button onClick={reset} className="btn-base btn-outline">{s('newScan')}</button>
                 </div>
               </div>
@@ -491,9 +591,9 @@ export default function App() {
               {/* Summary strip */}
               <div className="summary-strip">
                 {[
-                  { k:'confidence', v:`${Math.round((result.confidence||0.95)*100)}%`,  c:'var(--dark)' },
-                  { k:'medicines',  v: result.medicines?.length || 0,                    c:'var(--dark)' },
-                  { k:'diagnoses',  v: result.diagnosis?.length || 0,                    c:'var(--dark)' },
+                  { k:'confidence', v:`${Math.round((currentResult.confidence||0.95)*100)}%`,  c:'var(--dark)' },
+                  { k:'medicines',  v: currentResult.medicines?.length || 0,                    c:'var(--dark)' },
+                  { k:'diagnoses',  v: currentResult.diagnosis?.length || 0,                    c:'var(--dark)' },
                   { k:'scriptLabel',v: LANGS[prescLang||'en']?.label || '—',            c:'var(--dark)' },
                 ].map(({ k, v, c }) => (
                   <div key={k} className="summary-stat-card">
@@ -515,10 +615,10 @@ export default function App() {
                       <span className="section-label">{s('patient')}</span>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                      <Field label={s('fullName')} value={result.patient?.name} accent/>
+                      <Field label={s('fullName')} value={currentResult.patient?.name} accent/>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
-                        <Field label={s('age')}    value={result.patient?.age}/>
-                        <Field label={s('gender')} value={result.patient?.gender}/>
+                        <Field label={s('age')}    value={currentResult.patient?.age}/>
+                        <Field label={s('gender')} value={currentResult.patient?.gender}/>
                       </div>
                     </div>
                   </div>
@@ -530,21 +630,21 @@ export default function App() {
                       <span className="section-label">{s('doctor')}</span>
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                      <Field label={s('name')} value={result.doctor?.name} accent/>
-                      <Field label={s('spec')} value={result.doctor?.specialization}/>
-                      <Field label={s('reg')}  value={result.doctor?.registration}/>
+                      <Field label={s('name')} value={currentResult.doctor?.name} accent/>
+                      <Field label={s('spec')} value={currentResult.doctor?.specialization}/>
+                      <Field label={s('reg')}  value={currentResult.doctor?.registration}/>
                     </div>
                   </div>
 
                   {/* Diagnosis */}
-                  {result.diagnosis?.length > 0 && (
+                  {currentResult.diagnosis?.length > 0 && (
                     <div className="info-card">
                       <div className="section-title-group">
                         <Activity size={16} className="section-icon"/>
                         <span className="section-label">{s('diagnosisSec')}</span>
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
-                        {result.diagnosis.map((d, i) => (
+                        {currentResult.diagnosis.map((d, i) => (
                           <span key={i} className="feature-pill" style={{ color: 'var(--dark)' }}>{d}</span>
                         ))}
                       </div>
@@ -553,11 +653,11 @@ export default function App() {
 
                   {/* Confidence ring */}
                   <div className="info-card" style={{ display:'flex', alignItems:'center', gap:'20px' }}>
-                    <ConfRing value={result.confidence || 0.95}/>
+                    <ConfRing value={currentResult.confidence || 0.95}/>
                     <div>
                       <div style={{ fontSize:'14px', fontWeight:'800', color:'var(--dark)', marginBottom:'4px' }}>{s('aiConf')}</div>
                       <div style={{ fontSize:'12px', color:'var(--text-secondary)', lineHeight:1.5 }}>
-                        {(result.confidence || 0.95) > 0.9 ? s('highConf') : s('modConf')}
+                        {(currentResult.confidence || 0.95) > 0.9 ? s('highConf') : s('modConf')}
                       </div>
                     </div>
                   </div>
@@ -572,11 +672,11 @@ export default function App() {
                       marginLeft:'auto', padding:'4px 12px', borderRadius:'20px', 
                       background:'var(--bg-secondary)', color:'var(--dark)', 
                       fontSize:'11px', fontWeight:'800' 
-                    }}>{result.medicines?.length || 0} {s('found')}</span>
+                    }}>{currentResult.medicines?.length || 0} {s('found')}</span>
                   </div>
-                  {result.medicines?.length ? (
+                  {currentResult.medicines?.length ? (
                     <div className="medicine-list">
-                      {result.medicines.map((m, i) => <MedCard key={i} med={m} idx={i} lang={lang}/>)}
+                      {currentResult.medicines.map((m, i) => <MedCard key={i} med={m} idx={i} lang={lang}/>)}
                     </div>
                   ) : (
                     <div style={{ textAlign:'center', padding:'60px 0', color:'var(--text-muted)' }}>
@@ -587,7 +687,7 @@ export default function App() {
                 </div>
               </div>
 
-              {result.raw_text && <RawTextPanel text={result.raw_text} lang={lang}/>}
+              {currentResult.raw_text && <RawTextPanel text={currentResult.raw_text} lang={lang}/>}
             </motion.div>
           )}
 
