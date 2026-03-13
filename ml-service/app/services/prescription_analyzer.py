@@ -202,6 +202,7 @@ class AnalysisResult:
     raw_text:         str
     success:          bool = True
     error:            str  = ""
+    detected_language: str = "en"
 
 
 
@@ -568,9 +569,13 @@ Example:
             conf = self._score_fallback(ocr_conf, len(medicines), patient, doctor)
         logger.info("[%s] conf=%.0f%%  patient=%r  doctor=%r  meds=%d",
                     source, conf*100, patient.name, doctor.name, len(medicines))
-        return AnalysisResult(prescription_id=pid, patient=patient, doctor=doctor,
-                              medicines=medicines, diagnosis=diag,
-                              confidence_score=conf, raw_text=raw_text, success=True)
+        ar = AnalysisResult(
+            prescription_id=pid, patient=patient, doctor=doctor,
+            medicines=medicines, diagnosis=diag,
+            confidence_score=conf, raw_text=raw_text, success=True
+        )
+        ar.detected_language = str(data.get("detected_language", "en") or "en")
+        return ar
 
     def _score_vision(self, p: Patient, d: Doctor, m: List[Medicine]) -> float:
         s = 0.85
@@ -790,7 +795,8 @@ Example:
             "medicines": [],
             "diagnosis": [],
             "vitals": {"bp": "", "weight": ""},
-            "date": ""
+            "date": "",
+            "detected_language": ""
         }
         for src in [h, b, m]:
             if not src:
@@ -821,6 +827,9 @@ Example:
 
             if src.get("date") and not result["date"]:
                 result["date"] = src["date"]
+
+            if src.get("detected_language") and not result["detected_language"]:
+                result["detected_language"] = src["detected_language"]
 
         return result
 

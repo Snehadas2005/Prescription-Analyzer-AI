@@ -14,7 +14,6 @@ class ExtractionService:
     def __init__(self):
         cohere_api_key = os.getenv("COHERE_API_KEY")
 
-        # Try keys.py fallback
         if not cohere_api_key:
             try:
                 from .integration.keys import COHERE_API_KEY
@@ -46,6 +45,7 @@ class ExtractionService:
                     "diagnosis": [],
                     "confidence_score": 0.0,
                     "raw_text": "",
+                    "detected_language": "en",
                     "error": result.error,
                     "message": "Analysis failed",
                 }
@@ -78,6 +78,8 @@ class ExtractionService:
                 "diagnosis": result.diagnosis or [],
                 "confidence_score": float(result.confidence_score),
                 "raw_text": result.raw_text or "",
+                # Pass through detected language from Gemini response
+                "detected_language": getattr(result, "detected_language", "en"),
                 "message": "Analysis completed successfully",
                 "error": "",
             }
@@ -93,6 +95,7 @@ class ExtractionService:
                 "diagnosis": [],
                 "confidence_score": 0.0,
                 "raw_text": "",
+                "detected_language": "en",
                 "error": str(e),
                 "message": "Unexpected error during analysis",
             }
