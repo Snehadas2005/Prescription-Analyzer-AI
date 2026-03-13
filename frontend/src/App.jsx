@@ -35,7 +35,7 @@ const UI_STRINGS = {
     dosage: 'Dosage', frequency: 'Frequency', duration: 'Duration', timing: 'Timing',
     rawText: 'Raw OCR Text', readAloud: 'Read Aloud', stop: 'Stop',
     detected: (l) => `${LANGS[l]?.flag || ''} ${LANGS[l]?.label || l} script detected`,
-    footer: '© 2026 RxScan AI — Developed by Sneha Das · Powered by Gemini Vision',
+    footer: '© 2026 VaidyaScan — Developed by Sneha Das · Powered by Gemini Vision',
   },
   hi: {
     badge: 'जेमिनी 2.0 फ्लैश विज़न · हिंदी + अंग्रेज़ी',
@@ -61,7 +61,7 @@ const UI_STRINGS = {
     dosage: 'मात्रा', frequency: 'आवृत्ति', duration: 'अवधि', timing: 'समय',
     rawText: 'OCR टेक्स्ट', readAloud: 'आवाज़ में सुनें', stop: 'रोकें',
     detected: (l) => `${LANGS[l]?.flag || ''} ${LANGS[l]?.label || l} लिपि पहचानी गई`,
-    footer: '© 2026 वैद्यस्कैन — स्नेहा दास द्वारा विकसित · जेमिनी विज़न द्वारा संचालित',
+    footer: '© 2026 VaidyaScan — स्नेहा दास द्वारा विकसित · जेमिनी विज़न द्वारा संचालित',
   },
 };
 
@@ -121,14 +121,6 @@ const buildTTSScript = (result, lang) => {
   return s;
 };
 
-const HeartECG = ({ size = 28, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-    <path d=  "M14 24S4 18 4 10.5A5.5 5.5 0 0 1 14 7a5.5 5.5 0 0 1 10 3.5C24 18 14 24 14 24z"
-      stroke={color} strokeWidth="1.8" fill="none" strokeLinejoin="round"/>
-    <polyline points="6,13 9,13 11,9 13,17 15,13 17,13 19,13 21,13"
-      stroke={color} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
 
 const Noise = () => (
   <svg className="noise-overlay">
@@ -371,10 +363,10 @@ export default function App() {
       <header ref={headerRef} className="main-header">
         <div className="logo-group">
           <div className="logo-box">
-            <HeartECG size={20} color="white"/>
+            <Activity size={20} color="white"/>
           </div>
           <span className="logo-text">
-            {lang === 'hi' ? 'वैद्यस्कैन' : 'RxScan AI'}
+            VaidyaScan
           </span>
         </div>
 
@@ -472,7 +464,7 @@ export default function App() {
                   }}/>
                 ))}
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <HeartECG size={32} color="var(--dark)"/>
+                  <Activity size={32} color="var(--dark)"/>
                 </div>
               </div>
               <h2 style={{ fontSize:'28px', fontWeight:'900', color: 'var(--dark)', marginBottom:'10px' }}>{s('analyzing')}</h2>
