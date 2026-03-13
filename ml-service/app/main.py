@@ -65,13 +65,11 @@ async def health_check():
 
 @app.post("/extract")
 async def extract_prescription(file: UploadFile = File(...)):
-    """Original endpoint — kept for backward compatibility."""
     return await _analyse(file)
 
 
 @app.post("/analyze-prescription")
 async def analyze_prescription(file: UploadFile = File(...)):
-    """Primary endpoint called by the Go backend."""
     return await _analyse(file)
 
 
@@ -110,7 +108,6 @@ async def _analyse(file: UploadFile) -> JSONResponse:
 
 
 def _is_image(data: bytes) -> bool:
-    """Quick magic-byte check."""
     sigs = [
         b"\xFF\xD8\xFF",       # JPEG
         b"\x89PNG\r\n\x1a\n",  # PNG

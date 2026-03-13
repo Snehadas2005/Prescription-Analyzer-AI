@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 import pytesseract
 
-# ── NEW Gemini SDK (google-genai) ─────────────────────────────────────────────
+
 try:
     from google import genai as _genai
     from google.genai import types as _genai_types
@@ -19,14 +19,14 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
-# ── Cohere ────────────────────────────────────────────────────────────────────
+
 try:
     import cohere as _cohere_lib
     COHERE_AVAILABLE = True
 except ImportError:
     COHERE_AVAILABLE = False
 
-# ── thread caps ───────────────────────────────────────────────────────────────
+
 for _k in ("OMP_NUM_THREADS","OPENBLAS_NUM_THREADS","MKL_NUM_THREADS",
            "VECLIB_MAXIMUM_THREADS","NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_k, "1")
@@ -38,7 +38,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# ── config ────────────────────────────────────────────────────────────────────
+
 MAX_IMAGE_PX      = 2000
 GEMINI_MODEL      = "gemini-2.5-flash-lite"
 MAX_OUTPUT_TOKENS = 800
@@ -47,19 +47,15 @@ RATE_LIMIT_RPM    = 5
 CACHE_MAX_SIZE    = 200
 
 
-# ── load API keys ─────────────────────────────────────────────────────────────
 def _load_key(env_name: str) -> Optional[str]:
-
-    # 1. Already in environment
     val = os.getenv(env_name, "").strip()
     if val:
         logger.info("✓ %s loaded from environment", env_name)
         return val
 
-    # 2. Parse .env file directly (handles "KEY= value" with spaces)
     for dot_env in [
         pathlib.Path(".env"),
-        pathlib.Path(__file__).parent.parent.parent / ".env",  # repo root
+        pathlib.Path(__file__).parent.parent.parent / ".env",
         pathlib.Path(__file__).parent.parent.parent.parent / ".env",
     ]:
         if dot_env.exists():
@@ -76,11 +72,9 @@ def _load_key(env_name: str) -> Optional[str]:
                         logger.info("✓ %s loaded from %s", env_name, dot_env)
                         return v
 
-    # 3. Import integration.keys as a module
     try:
         import importlib
         keys_mod = importlib.import_module("integration.keys")
-        # Force reload in case it was cached before the key was added
         importlib.reload(keys_mod)
         val = str(getattr(keys_mod, env_name, "") or "").strip()
         if val:
@@ -90,7 +84,6 @@ def _load_key(env_name: str) -> Optional[str]:
     except Exception:
         pass
 
-    # 4. Parse integration/keys.py as raw text (bypasses import issues)
     for keys_file in [
         pathlib.Path("integration/keys.py"),
         pathlib.Path(__file__).parent.parent / "integration" / "keys.py",
@@ -113,7 +106,6 @@ def _load_key(env_name: str) -> Optional[str]:
     return None
 
 
-# ── system prompt from file ───────────────────────────────────────────────────
 def _load_system_prompt() -> str:
     candidates = [
         pathlib.Path(__file__).parent / "gemini_system_prompt.txt",
@@ -176,7 +168,7 @@ SPECIALIZATIONS = [
 ]
 
 
-# ── data classes ──────────────────────────────────────────────────────────────
+
 @dataclass
 class Patient:
     name:   str = ""
@@ -212,7 +204,7 @@ class AnalysisResult:
     error:            str  = ""
 
 
-# ── cache ─────────────────────────────────────────────────────────────────────
+
 class _Cache:
     def __init__(self, max_size: int = CACHE_MAX_SIZE):
         self._store: Dict[str, dict] = {}
@@ -243,7 +235,7 @@ class _Cache:
         return f"Cache: {len(self._store)} stored | {self._hits} hits | {self._miss} misses | {r:.0f}% hit rate"
 
 
-# ── rate limiter ──────────────────────────────────────────────────────────────
+
 class _RateLimiter:
     def __init__(self, rpm: int = RATE_LIMIT_RPM):
         self._rpm  = rpm
@@ -260,7 +252,7 @@ class _RateLimiter:
         self._ts.append(time.monotonic())
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+
 class PrescriptionAnalyzer:
 
     _USER_PROMPT = """
@@ -317,7 +309,6 @@ Example:
         else:
             logger.warning("⚠  Engine : Tesseract + regex only")
 
-    # ── init ──────────────────────────────────────────────────────────────────
     def _init_gemini(self):
         if not GEMINI_AVAILABLE:
             logger.warning("google-genai not installed. Run:\n"
@@ -359,7 +350,6 @@ Example:
             logger.warning("Cohere init error: %s", e)
             return None
 
-    # ── main entry ────────────────────────────────────────────────────────────
     def analyze_prescription(self, image_path: str) -> AnalysisResult:
         pid = f"RX{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:6].upper()}"
         logger.info("Analysing %s  [id=%s]", image_path, pid)
@@ -415,7 +405,6 @@ Example:
             logger.exception("Unhandled error")
             return self._make_error(pid, str(exc))
 
-    # ── Gemini Vision (new SDK) with exponential backoff retry ───────────────
     def _gemini_extract(self, img: np.ndarray) -> Optional[Dict]:
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img_rgb)
@@ -477,7 +466,6 @@ Example:
             return None
 
 
-    # ── Cohere ────────────────────────────────────────────────────────────────
     def _cohere_extract(self, text: str) -> Optional[Dict]:
         prompt = (
             "Indian prescription expert. OCR text below may have errors — correct them.\n"
@@ -536,7 +524,6 @@ Example:
                     pat["name"] = cand; data["patient"] = pat
         return data
 
-    # ── build result ──────────────────────────────────────────────────────────
     def _build_result(self, pid: str, data: Dict, source: str,
                       raw_text: str = "", ocr_conf: float = 0.0) -> AnalysisResult:
         p = data.get("patient") or {}
@@ -585,7 +572,6 @@ Example:
                               medicines=medicines, diagnosis=diag,
                               confidence_score=conf, raw_text=raw_text, success=True)
 
-    # ── scoring ───────────────────────────────────────────────────────────────
     def _score_vision(self, p: Patient, d: Doctor, m: List[Medicine]) -> float:
         s = 0.85
         if p.name: s+=0.03
@@ -610,7 +596,6 @@ Example:
         ds = (0.6 if d.name else 0)+(0.2 if d.specialization else 0)
         return float(min(0.75, max(0.0, round(0.20*ocr+0.35*ms+0.20*ps+0.25*ds,4))))
 
-    # ── image helpers ─────────────────────────────────────────────────────────
     def _load_and_resize(self, path: str) -> Optional[np.ndarray]:
         try:
             img = cv2.imread(path)
@@ -680,7 +665,6 @@ Example:
         small=cv2.resize(img,(64,64))
         return hashlib.md5(small.tobytes()).hexdigest()
 
-    # ── pattern fallback ──────────────────────────────────────────────────────
     def _pattern_extract(self, text: str) -> Tuple[Dict, Dict]:
         doc:Dict[str,str]={"name":"","specialization":"","registration_number":""}
         pat:Dict[str,str]={"name":"","age":"","gender":""}

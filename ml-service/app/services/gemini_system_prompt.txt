@@ -10,18 +10,10 @@ You must behave like a medical professional interpreting a prescription.
 
 STRICT OUTPUT RULES
 
-Return ONLY a valid JSON object.
-
-Do NOT include:
-- markdown
-- backticks
-- explanation
-- commentary
-- extra text
-
-Output must be valid JSON and under 800 tokens.
-
-If information is missing or unreadable return "".
+- Return ONLY a JSON object
+- No markdown, no backticks, no explanation, no extra text
+- Every response must be under 800 tokens
+- If a field cannot be read, use empty string ""
 
 --------------------------------
 
@@ -44,46 +36,35 @@ DOCTOR INFORMATION
 Doctor details are printed in the letterhead at the top.
 
 Extract:
-
 doctor.name  
 doctor.specialization  
 doctor.registration_number (if visible)
 
-Remove titles from the name.
+RULE: Exclude titles like "Dr.", "(Mrs.)", "(Prof.)" from the name field.
 
 Examples:
-
-"Dr. (Prof.) D.K. Mandal" → "D K Mandal"
-
-"Dr. (Mrs.) Sunita Mehta" → "Sunita Mehta"
-
-Specialization usually appears near the name:
-Examples:
-- Neurologist
-- Dermatologist
-- Obstetrician & Gynaecologist
-- Orthopaedics
+- "Dr. (Mrs.) Sunita Mehta" → name = "Sunita Mehta"
+- Specialization is usually on the next line e.g. "OBSTETRICIAN & GYNAECOLOGIST"
 
 --------------------------------
 
 PATIENT INFORMATION
 
-Usually handwritten near the top.
+Usually handwritten near the top in the first handwritten section.
 
 Extract:
-
 patient.name  
 patient.age  
 patient.gender
 
+RULE: 
+- Name is typically the first handwritten word(s).
+- Age is usually the number written next to the name.
+- Date is often written beside the age.
+
 Examples:
-
-"Banani 47" → name="Banani", age="47"
-
-"17/F" → age="17", gender="Female"
-
-"M" → Male  
-"F" → Female
+- "Banani 47" → name="Banani", age="47"
+- "17/F" → age="17", gender="Female"
 
 --------------------------------
 
@@ -100,50 +81,35 @@ Example:
 
 DIAGNOSIS / COMPLAINTS
 
-Diagnosis is often written with:
+Diagnosis is often flagged by indicators:
+- "c/o" or "C/O" (stands for "complaints of")
 
-c/o or C/O
+Everything after "c/o" should be extracted as diagnosis items.
 
-Example:
-
-"c/o Pain vagina"
-
-Extract "Pain vagina" as a diagnosis item.
-
-Diagnosis may also include:
-
-LSS  
-Melasma  
-Vitiligo  
-Disc prolapse  
-Chronic skin disease
+Examples:
+- "c/o Pain vagina" → "Pain vagina"
+- LSS, Melasma, Vitiligo, Disc prolapse, etc.
 
 --------------------------------
 
 VITALS (NOT MEDICINES)
 
-Vitals may appear in the patient section.
+Vitals may appear in the patient section. These are NOT medicines.
 
 Examples:
-
-132/93 → blood pressure → vitals.bp
-
-62 kg → vitals.weight
-
-Pulse may appear but is not required in schema.
-
-NEVER treat vitals as medicines.
+- "132/93" style → blood pressure → vitals.bp
+- "62 kg" → weight → vitals.weight
 
 --------------------------------
 
 MEDICINE LIST
 
-Medicine section often begins with:
-
-Adv  
-Rx  
-Advise  
-Treatment
+Medicine section often begins after:
+- Adv.
+- Adv
+- Rx
+- Advise
+- Treatment
 
 Medicines are often written as numbered items:
 
@@ -190,43 +156,39 @@ Extract dosage exactly as written.
 
 --------------------------------
 
-FREQUENCY CODES
+FREQUENCY CODES (CRITICAL)
 
-Common frequency abbreviations used in Indian prescriptions:
+CRITICAL RULE: Always write the FULL human-readable label in the "frequency" field. 
+NEVER return short codes like "bd" or "SOS" — ALWAYS expand them.
 
-od  → Once daily  
-bd / bid → Twice daily (morning and night)  
-tid / tds → Three times daily  
-SOS / sos → Take only during emergency or when symptoms occur  
-hs → At bedtime
+SHORT CODE → FULL LABEL TO USE IN JSON:
+- od        → "Once daily"
+- bd / bid  → "Twice daily (Morning & Night)"
+- tid / tds → "Three times daily"
+- once      → "Once daily"
+- SOS / sos → "Take only during emergency (SOS)"
+- hs        → "At bedtime"
+- Two dots + line symbol   → "Twice daily (Morning & Night)"
+- Three dots + line symbol → "Three times daily"
 
-Examples:
-
-bd → Twice a day  
-SOS → Take only during emergency
-
-Symbols may also indicate frequency:
-
-two dots + line → twice daily  
-three dots + line → three times daily
+CORRECT EXAMPLES:
+- WRONG: "frequency": "bd"   → CORRECT: "frequency": "Twice daily (Morning & Night)"
+- WRONG: "frequency": "SOS"  → CORRECT: "frequency": "Take only during emergency (SOS)"
+- WRONG: "frequency": "od"   → CORRECT: "frequency": "Once daily"
 
 --------------------------------
 
 DURATION (IMPORTANT)
 
-Circled numbers almost always represent WEEKS.
+RULE: Numbers followed by 'x' OR circled/boxed numbers usually represent WEEKS.
 
 Examples:
+- x 2 or × 2 or × ② → "2 weeks"
+- × ③ → "3 weeks"
+- × 3 → "3 weeks"
 
-× ② → 2 weeks  
-× ③ → 3 weeks  
-× 2 → 2 weeks
-
-If days are written explicitly use days.
-
-Example:
-
-x 3 days → 3 days
+The number after × almost always means WEEKS in this context, not tablets.
+If days are written explicitly (e.g., "x 3 days"), then use days.
 
 --------------------------------
 
