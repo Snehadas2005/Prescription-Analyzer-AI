@@ -29,8 +29,24 @@ type MLExtractionResult struct {
 	Message         string                   `json:"message,omitempty"`
 }
 
+// warmUpMLService pings the ML service health endpoint to wake it up
+// (important for Render free-tier which spins down inactive services)
+func (h *PrescriptionHandler) warmUpMLService() {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(h.mlServiceURL + "/health")
+	if err != nil {
+		log.Printf("⚠️  ML service warm-up ping failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("✅ ML service warm-up ping: status %d", resp.StatusCode)
+}
+
 // callMLService calls the ML service to analyze prescription
 func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionResult, error) {
+	// Warm up the ML service first (handles Render cold starts)
+	h.warmUpMLService()
+
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -47,6 +63,8 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to close writer: %w", err)
 	}
 
+	log.Printf("📡 Calling ML service at: %s/analyze-prescription", h.mlServiceURL)
+
 	req, err := http.NewRequest("POST", h.mlServiceURL+"/analyze-prescription", body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -57,7 +75,7 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call ML service: %w", err)
+		return nil, fmt.Errorf("failed to call ML service at %s: %w", h.mlServiceURL, err)
 	}
 	defer resp.Body.Close()
 
@@ -66,7 +84,6 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Log the response for debugging
 	log.Printf("ML Service Response Status: %d", resp.StatusCode)
 	log.Printf("ML Service Response Body: %s", string(bodyBytes))
 
@@ -79,13 +96,11 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 		return nil, fmt.Errorf("failed to parse ML response: %w. Response: %s", err, string(bodyBytes))
 	}
 
-	// Validate the result
 	if !result.Success {
 		log.Printf("ML service analysis failed: %s", result.Error)
 		return &result, nil
 	}
 
-	// Ensure confidence score is valid
 	if result.ConfidenceScore < 0 || result.ConfidenceScore > 1 {
 		log.Printf("Invalid confidence score: %f, setting to 0", result.ConfidenceScore)
 		result.ConfidenceScore = 0
@@ -126,6 +141,7 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	}
 
 	log.Printf("📄 Uploading file: %s, Size: %d bytes", file.Filename, len(fileBytes))
+	log.Printf("📡 ML service URL configured as: %s", h.mlServiceURL)
 
 	imageURL, err := h.storageService.UploadImage(fileBytes, file.Filename)
 	if err != nil {
@@ -139,14 +155,13 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	if err != nil {
 		log.Printf("❌ ML service error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to extract information: %v", err),
+			"error": fmt.Sprintf("Failed to reach ML service (%s): %v", h.mlServiceURL, err),
 		})
 		return
 	}
 
 	if !extractionResult.Success {
 		log.Printf("⚠️ ML service returned unsuccessful result: %s", extractionResult.Error)
-		// Return error but with 200 status so frontend can handle it
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"error":   extractionResult.Error,
@@ -185,7 +200,6 @@ func (h *PrescriptionHandler) Upload(c *gin.Context) {
 	log.Printf("   Patient: %s", prescription.Patient.Name)
 	log.Printf("   Doctor: %s", prescription.Doctor.Name)
 	log.Printf("   Medicines: %d", len(prescription.Medicines))
-
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -243,13 +257,12 @@ func getIntFromMap(m map[string]interface{}, key string) int {
 		case float64:
 			return int(val)
 		case string:
-			// Try to parse string to int
 			var num int
 			fmt.Sscanf(val, "%d", &num)
 			return num
 		}
 	}
-	return 1 // Default quantity
+	return 1
 }
 
 func isValidImageType(filename string) bool {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 
 	"prescription-analyzer-ai/internal/database"
@@ -36,6 +37,18 @@ func main() {
 			"status":  "healthy",
 			"service": "prescription-analyzer-backend",
 		})
+	})
+
+	// ML service connectivity check
+	r.GET("/ml-health", func(c *gin.Context) {
+		mlURL := os.Getenv("ML_SERVICE_URL")
+		resp, err := http.Get(mlURL + "/health")
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error(), "ml_url": mlURL})
+			return
+		}
+		defer resp.Body.Close()
+		c.JSON(200, gin.H{"ml_status": resp.StatusCode, "ml_url": mlURL})
 	})
 
 	// Routes
