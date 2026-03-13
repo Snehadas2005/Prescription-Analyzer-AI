@@ -131,7 +131,7 @@ const HeartECG = ({ size = 28, color = 'currentColor' }) => (
 );
 
 const Noise = () => (
-  <svg style={{ position:'fixed', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0, opacity:0.03 }}>
+  <svg className="noise-overlay">
     <filter id="noise">
       <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3"/>
       <feColorMatrix type="saturate" values="0"/>
@@ -150,30 +150,14 @@ const LangSelector = ({ value, onChange }) => {
   }, []);
   return (
     <div ref={ref} style={{ position:'relative', userSelect:'none' }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        display:'flex', alignItems:'center', gap:'6px',
-        padding:'8px 14px', borderRadius:'12px',
-        border:'1.5px solid #2a2a3e', background:'#16162a',
-        color:'#c8c8e8', fontSize:'13px', fontWeight:'600',
-        cursor:'pointer', fontFamily:'inherit'
-      }}>
+      <button onClick={() => setOpen(o => !o)} className="lang-select-btn">
         <Globe size={14}/> {LANGS[value]?.flag} {LANGS[value]?.label} <ChevronDown size={12}/>
       </button>
       {open && (
-        <div style={{
-          position:'absolute', top:'110%', right:0,
-          background:'#1a1a2e', border:'1.5px solid #2a2a3e',
-          borderRadius:'14px', padding:'6px', zIndex:100,
-          minWidth:'170px', boxShadow:'0 20px 60px rgba(0,0,0,0.5)'
-        }}>
+        <div className="lang-dropdown">
           {Object.entries(LANGS).map(([k, v]) => (
-            <button key={k} onClick={() => { onChange(k); setOpen(false); }} style={{
-              display:'flex', alignItems:'center', gap:'10px',
-              width:'100%', padding:'9px 12px', borderRadius:'9px',
-              border:'none', background: value === k ? '#2a2a4a' : 'transparent',
-              color:'#c8c8e8', fontSize:'13px', cursor:'pointer',
-              fontFamily:'inherit', textAlign:'left'
-            }}>
+            <button key={k} onClick={() => { onChange(k); setOpen(false); }} 
+              className={`lang-option ${value === k ? 'active' : ''}`}>
               {v.flag} {v.label}
             </button>
           ))}
@@ -201,15 +185,7 @@ const TTSButton = ({ result, lang }) => {
   };
 
   return (
-    <button onClick={toggle} style={{
-      display:'flex', alignItems:'center', gap:'8px',
-      padding:'10px 18px', borderRadius:'12px',
-      border:'1.5px solid', borderColor: speaking ? '#7c6bdb' : '#2a2a3e',
-      background: speaking ? 'rgba(124,107,219,0.15)' : '#16162a',
-      color: speaking ? '#a89af0' : '#8888aa',
-      fontSize:'13px', fontWeight:'600', cursor:'pointer',
-      fontFamily:'inherit', transition:'all 0.2s'
-    }}>
+    <button onClick={toggle} className={`tts-btn ${speaking ? 'active' : ''}`}>
       {speaking ? <VolumeX size={15}/> : <Volume2 size={15}/>}
       {speaking ? S(lang, 'stop') : S(lang, 'readAloud')}
     </button>
@@ -225,32 +201,22 @@ const UploadZone = ({ onFile, lang }) => {
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); process(e.dataTransfer.files[0]); }}
       onClick={() => document.getElementById('file-upload').click()}
-      style={{
-        border:`2px dashed ${dragging ? '#7c6bdb' : '#2a2a3e'}`,
-        borderRadius:'24px', padding:'64px 32px', textAlign:'center', cursor:'pointer',
-        background: dragging ? 'rgba(124,107,219,0.06)' : 'transparent', transition:'all 0.25s'
-      }}
+      className={`upload-zone-wrapper ${dragging ? 'dragging' : ''}`}
     >
-      <div style={{
-        width:'72px', height:'72px', borderRadius:'20px',
-        background:'linear-gradient(135deg,#7c6bdb22,#a89af022)',
-        border:'1.5px solid #2a2a3e', display:'flex', alignItems:'center',
-        justifyContent:'center', margin:'0 auto 20px'
-      }}>
-        <Upload size={28} color="#7c6bdb"/>
+      <div className="upload-icon-box">
+        <Upload size={28} />
       </div>
-      <p style={{ color:'#c8c8e8', fontWeight:'700', fontSize:'17px', marginBottom:'8px' }}>
+      <p style={{ color:'var(--dark)', fontWeight:'700', fontSize:'17px', marginBottom:'8px' }}>
         {S(lang, 'dropTitle')}
       </p>
-      <p style={{ color:'#555570', fontSize:'13px', marginBottom:'20px' }}>
+      <p style={{ color:'var(--text-secondary)', fontSize:'13px', marginBottom:'20px' }}>
         {S(lang, 'dropSub')}
       </p>
       <div style={{ display:'flex', justifyContent:'center', gap:'8px', flexWrap:'wrap' }}>
         {['tag1','tag2','tag3'].map(k => (
-          <span key={k} style={{
-            padding:'5px 12px', borderRadius:'20px',
-            border:'1px solid #2a2a3e', color:'#6666aa', fontSize:'12px'
-          }}>{S(lang, k)}</span>
+          <span key={k} className="feature-pill" style={{ padding: '5px 12px', fontSize: '12px' }}>
+            {S(lang, k)}
+          </span>
         ))}
       </div>
       <input type="file" id="file-upload" style={{ display:'none' }}
@@ -263,25 +229,27 @@ const ConfRing = ({ value }) => {
   const pct = Math.round(value * 100);
   const r = 36, c = 2 * Math.PI * r;
   return (
-    <div style={{ position:'relative', width:'96px', height:'96px', flexShrink:0 }}>
-      <svg width="96" height="96" style={{ transform:'rotate(-90deg)' }}>
-        <circle cx="48" cy="48" r={r} fill="none" stroke="#1e1e32" strokeWidth="7"/>
-        <circle cx="48" cy="48" r={r} fill="none" stroke="#7c6bdb" strokeWidth="7"
+    <div className="conf-ring">
+      <svg width="96" height="96" className="conf-ring-svg">
+        <circle cx="48" cy="48" r={r} fill="none" stroke="var(--bg-secondary)" strokeWidth="7"/>
+        <circle cx="48" cy="48" r={r} fill="none" stroke="var(--dark)" strokeWidth="7"
           strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c}
           style={{ transition:'stroke-dashoffset 1s ease', strokeLinecap:'round' }}/>
       </svg>
-      <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-        <span style={{ fontSize:'20px', fontWeight:'900', color:'#c8c8e8', lineHeight:1 }}>{pct}</span>
-        <span style={{ fontSize:'10px', color:'#555570', fontWeight:'600' }}>%</span>
+      <div className="conf-ring-text-container">
+        <span style={{ fontSize:'20px', fontWeight:'900', color:'var(--dark)', lineHeight:1 }}>{pct}</span>
+        <span style={{ fontSize:'10px', color:'var(--text-muted)', fontWeight:'600' }}>%</span>
       </div>
     </div>
   );
 };
 
 const Field = ({ label, value, accent }) => (
-  <div>
-    <div style={{ fontSize:'10px', fontWeight:'800', color:'#44445a', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:'5px' }}>{label}</div>
-    <div style={{ fontSize:'14px', fontWeight:'600', color: value ? (accent || '#c8c8e8') : '#333350' }}>{value || '—'}</div>
+  <div className="field-group">
+    <div className="field-label">{label}</div>
+    <div className={`field-value ${value ? (accent ? 'accent' : '') : 'empty'}`}>
+      {value || '—'}
+    </div>
   </div>
 );
 
@@ -291,13 +259,14 @@ const MedCard = ({ med, idx, lang }) => {
     gsap.fromTo(ref.current, { opacity:0, y:24 }, { opacity:1, y:0, duration:0.5, delay:idx*0.07, ease:'power2.out' });
   }, []);
   return (
-    <div ref={ref} style={{
-      background:'#111125', border:'1px solid #1e1e38',
-      borderRadius:'20px', padding:'22px', borderLeft:'3px solid #7c6bdb'
-    }}>
+    <div ref={ref} className="med-card">
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px' }}>
-        <h4 style={{ fontSize:'15px', fontWeight:'800', color:'#a89af0', margin:0 }}>{med.name}</h4>
-        <span style={{ padding:'3px 10px', borderRadius:'20px', background:'rgba(124,107,219,0.12)', color:'#7c6bdb', fontSize:'11px', fontWeight:'700' }}>#{idx+1}</span>
+        <h4 style={{ fontSize:'16px', fontWeight:'800', color:'var(--dark)', margin:0 }}>{med.name}</h4>
+        <span style={{ 
+          padding:'4px 12px', borderRadius:'20px', 
+          background:'var(--bg-secondary)', color:'var(--dark)', 
+          fontSize:'11px', fontWeight:'800' 
+        }}>#{idx+1}</span>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
         <Field label={S(lang,'dosage')}    value={med.dosage}/>
@@ -312,24 +281,15 @@ const MedCard = ({ med, idx, lang }) => {
 const RawTextPanel = ({ text, lang }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ marginTop:'24px', background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', overflow:'hidden' }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        width:'100%', padding:'16px 24px', display:'flex', alignItems:'center',
-        justifyContent:'space-between', background:'transparent', border:'none',
-        cursor:'pointer', color:'#555570', fontFamily:'inherit',
-        fontWeight:'700', fontSize:'12px', textTransform:'uppercase', letterSpacing:'0.07em'
-      }}>
+    <div className="raw-text-panel">
+      <button onClick={() => setOpen(o => !o)} className="raw-text-toggle">
         <span style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-          <FileText size={13}/> {S(lang,'rawText')}
+          <FileText size={14}/> {S(lang,'rawText')}
         </span>
         <ChevronDown size={15} style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform 0.2s' }}/>
       </button>
       {open && (
-        <pre style={{
-          padding:'0 24px 24px', margin:0, fontFamily:"'JetBrains Mono','Fira Mono',monospace",
-          fontSize:'12px', color:'#44445a', lineHeight:1.7,
-          whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:'260px', overflowY:'auto'
-        }}>{text}</pre>
+        <pre className="raw-text-content">{text}</pre>
       )}
     </div>
   );
@@ -404,42 +364,23 @@ export default function App() {
   };
 
   return (
-    <div style={{
-      minHeight:'100vh', background:'#0a0a1a', color:'#c8c8e8',
-      fontFamily:'"Inter","Noto Sans Devanagari","Noto Sans Bengali","Noto Sans Telugu",sans-serif',
-      position:'relative'
-    }}>
+    <div className="app-container">
       <Noise/>
 
       {/* ── HEADER ── */}
-      <header ref={headerRef} style={{
-        display:'flex', alignItems:'center', justifyContent:'space-between',
-        padding:'20px 32px', borderBottom:'1px solid #0f0f20',
-        position:'sticky', top:0, zIndex:50,
-        background:'rgba(10,10,26,0.92)', backdropFilter:'blur(16px)'
-      }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-          <div style={{
-            width:'36px', height:'36px', borderRadius:'10px',
-            background:'linear-gradient(135deg,#7c6bdb,#c084fc)',
-            display:'flex', alignItems:'center', justifyContent:'center'
-          }}>
+      <header ref={headerRef} className="main-header">
+        <div className="logo-group">
+          <div className="logo-box">
             <HeartECG size={20} color="white"/>
           </div>
-          <span style={{ fontWeight:'800', fontSize:'16px', letterSpacing:'-0.02em' }}>
+          <span className="logo-text">
             {lang === 'hi' ? 'वैद्यस्कैन' : 'RxScan AI'}
           </span>
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-          {/* Prescription script badge — info only, doesn't drive anything */}
           {prescLang && (
-            <span style={{
-              padding:'5px 12px', borderRadius:'20px',
-              background:'rgba(124,107,219,0.1)', border:'1px solid #2a2a4a',
-              color:'#7c6bdb', fontSize:'11px', fontWeight:'700',
-              display:'flex', alignItems:'center', gap:'5px'
-            }}>
+            <span className="detected-badge">
               <Languages size={11}/>
               {s('detected', prescLang)}
             </span>
@@ -448,81 +389,58 @@ export default function App() {
         </div>
       </header>
 
-      <main style={{ maxWidth:'1100px', margin:'0 auto', padding:'60px 24px 120px' }}>
+      <main className="max-width-container">
         <AnimatePresence mode="wait">
 
           {/* ── UPLOAD ── */}
           {phase === 'upload' && (
             <motion.div key="upload" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0, y:-20 }}>
 
-              <div style={{ textAlign:'center', marginBottom:'64px' }}>
-                <div style={{
-                  display:'inline-block', padding:'6px 16px', borderRadius:'20px',
-                  background:'rgba(124,107,219,0.1)', border:'1px solid rgba(124,107,219,0.3)',
-                  color:'#a89af0', fontSize:'12px', fontWeight:'700',
-                  letterSpacing:'0.06em', marginBottom:'28px'
-                }}>
+              <div className="hero-section">
+                <div className="hero-badge">
                   {s('badge')}
                 </div>
 
-                <h1 style={{
-                  fontSize:'clamp(36px,6vw,70px)', fontWeight:'900',
-                  lineHeight:1.05, letterSpacing:'-0.03em', color:'#e8e8f0', marginBottom:'22px'
-                }}>
+                <h1 className="hero-title">
                   {s('h1a')}<br/>
-                  <span style={{ background:'linear-gradient(90deg,#7c6bdb,#c084fc)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+                  <span className="hero-gradient-text">
                     {s('h1b')}
                   </span>
                 </h1>
 
-                <p style={{ fontSize:'17px', color:'#555570', maxWidth:'520px', margin:'0 auto 48px', lineHeight:1.6 }}>
+                <p className="hero-subtitle">
                   {s('sub')}
                 </p>
 
-                <div ref={featRef} style={{ display:'flex', justifyContent:'center', gap:'10px', flexWrap:'wrap', marginBottom:'56px' }}>
+                <div ref={featRef} className="feature-pills">
                   {[
                     { icon:<ShieldCheck size={13}/>, key:'feat1' },
                     { icon:<Zap size={13}/>,         key:'feat2' },
                     { icon:<Globe size={13}/>,        key:'feat3' },
                     { icon:<Volume2 size={13}/>,      key:'feat4' },
                   ].map(({ icon, key }) => (
-                    <span key={key} style={{
-                      display:'inline-flex', alignItems:'center', gap:'6px',
-                      padding:'7px 14px', borderRadius:'20px',
-                      border:'1px solid #1e1e38', background:'#111125',
-                      color:'#7788aa', fontSize:'12px', fontWeight:'600'
-                    }}>{icon}{s(key)}</span>
+                    <span key={key} className="feature-pill">{icon}{s(key)}</span>
                   ))}
                 </div>
               </div>
 
-              <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'28px', padding:'40px', maxWidth:'640px', margin:'0 auto' }}>
+              <div className="upload-card">
                 {!file ? (
                   <UploadZone onFile={handleFile} lang={lang}/>
                 ) : (
                   <div>
-                    <div style={{ position:'relative', marginBottom:'28px', borderRadius:'16px', overflow:'hidden', border:'1px solid #1e1e38' }}>
+                    <div style={{ position:'relative', marginBottom:'28px', borderRadius:'16px', overflow:'hidden', border:'1px solid var(--secondary)' }}>
                       <img src={preview} alt="Preview" style={{ width:'100%', maxHeight:'280px', objectFit:'cover', display:'block' }}/>
-                      <button onClick={reset} style={{
+                      <button onClick={reset} className="btn-base" style={{
                         position:'absolute', top:'10px', right:'10px',
                         width:'32px', height:'32px', borderRadius:'50%',
-                        background:'rgba(0,0,0,0.7)', border:'none',
+                        background:'rgba(28, 39, 76, 0.7)', border:'none',
                         color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'
                       }}><X size={16}/></button>
                     </div>
                     <div style={{ display:'flex', gap:'12px' }}>
-                      <button onClick={reset} style={{
-                        flex:1, padding:'13px', borderRadius:'14px',
-                        border:'1.5px solid #2a2a3e', background:'transparent',
-                        color:'#6666aa', fontWeight:'700', cursor:'pointer', fontFamily:'inherit'
-                      }}>{s('change')}</button>
-                      <button onClick={analyze} style={{
-                        flex:2, padding:'13px', borderRadius:'14px', border:'none',
-                        background:'linear-gradient(135deg,#7c6bdb,#9b87f0)',
-                        color:'white', fontWeight:'800', cursor:'pointer',
-                        fontSize:'15px', fontFamily:'inherit',
-                        boxShadow:'0 8px 30px rgba(124,107,219,0.4)'
-                      }}>{s('analyze')}</button>
+                      <button onClick={reset} className="btn-base btn-outline" style={{ flex: 1 }}>{s('change')}</button>
+                      <button onClick={analyze} className="btn-base btn-primary" style={{ flex: 2 }}>{s('analyze')}</button>
                     </div>
                   </div>
                 )}
@@ -544,23 +462,21 @@ export default function App() {
           {phase === 'analyzing' && (
             <motion.div key="analyzing" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
               style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'50vh', textAlign:'center' }}>
-              <div style={{ position:'relative', width:'112px', height:'112px', marginBottom:'40px' }}>
+              <div className="spinner-container">
                 {[80, 96, 112].map((sz, i) => (
-                  <div key={i} style={{
-                    position:'absolute', top:`${(112-sz)/2}px`, left:`${(112-sz)/2}px`,
-                    width:`${sz}px`, height:`${sz}px`, borderRadius:'50%',
-                    border:'2px solid transparent',
-                    borderTopColor:`rgba(124,107,219,${0.9-i*0.25})`,
+                  <div key={i} className="spinner-ring" style={{
+                    top:`${(112-sz)/2}px`, left:`${(112-sz)/2}px`,
+                    width:`${sz}px`, height:`${sz}px`,
+                    borderTopColor:`rgba(28, 39, 76, ${0.9-i*0.25})`,
                     animation:`spin ${1+i*0.3}s linear infinite`
                   }}/>
                 ))}
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <HeartECG size={28} color="#7c6bdb"/>
+                  <HeartECG size={32} color="var(--dark)"/>
                 </div>
               </div>
-              <h2 style={{ fontSize:'24px', fontWeight:'800', marginBottom:'10px' }}>{s('analyzing')}</h2>
-              <p style={{ color:'#555570', fontSize:'15px' }}>{s('analyzingSub')}</p>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <h2 style={{ fontSize:'28px', fontWeight:'900', color: 'var(--dark)', marginBottom:'10px' }}>{s('analyzing')}</h2>
+              <p style={{ color:'var(--text-secondary)', fontSize:'16px' }}>{s('analyzingSub')}</p>
             </motion.div>
           )}
 
@@ -569,49 +485,45 @@ export default function App() {
             <motion.div key="results" initial={{ opacity:0, y:30 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.5 }}>
 
               {/* Top bar */}
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'36px', flexWrap:'wrap', gap:'12px' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                  <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:'#4ade80', boxShadow:'0 0 8px #4ade80' }}/>
-                  <span style={{ fontWeight:'700', color:'#c8c8e8' }}>{s('done')}</span>
+              <div className="results-header-bar">
+                <div className="status-indicator">
+                  <div className="status-dot" />
+                  <span style={{ fontWeight:'700', color:'var(--dark)' }}>{s('done')}</span>
                 </div>
-                <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', alignItems: 'center' }}>
                   <TTSButton result={result} lang={lang}/>
-                  <button onClick={reset} style={{
-                    padding:'10px 18px', borderRadius:'12px', border:'1.5px solid #2a2a3e',
-                    background:'transparent', color:'#6666aa', fontSize:'13px',
-                    fontWeight:'700', cursor:'pointer', fontFamily:'inherit'
-                  }}>{s('newScan')}</button>
+                  <button onClick={reset} className="btn-base btn-outline">{s('newScan')}</button>
                 </div>
               </div>
 
               {/* Summary strip */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'16px', marginBottom:'32px' }}>
+              <div className="summary-strip">
                 {[
-                  { k:'confidence', v:`${Math.round((result.confidence||0.95)*100)}%`,  c:'#7c6bdb' },
-                  { k:'medicines',  v: result.medicines?.length || 0,                    c:'#a89af0' },
-                  { k:'diagnoses',  v: result.diagnosis?.length || 0,                    c:'#c084fc' },
-                  { k:'scriptLabel',v: LANGS[prescLang||'en']?.label || '—',            c:'#818cf8' },
+                  { k:'confidence', v:`${Math.round((result.confidence||0.95)*100)}%`,  c:'var(--dark)' },
+                  { k:'medicines',  v: result.medicines?.length || 0,                    c:'var(--dark)' },
+                  { k:'diagnoses',  v: result.diagnosis?.length || 0,                    c:'var(--dark)' },
+                  { k:'scriptLabel',v: LANGS[prescLang||'en']?.label || '—',            c:'var(--dark)' },
                 ].map(({ k, v, c }) => (
-                  <div key={k} style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'18px', padding:'20px 22px' }}>
-                    <div style={{ fontSize:'11px', color:'#44445a', fontWeight:'800', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'6px' }}>{s(k)}</div>
-                    <div style={{ fontSize:'24px', fontWeight:'900', color:c }}>{v}</div>
+                  <div key={k} className="summary-stat-card">
+                    <div className="stat-label">{s(k)}</div>
+                    <div className="stat-value" style={{ color: c }}>{v}</div>
                   </div>
                 ))}
               </div>
 
               {/* Content grid */}
-              <div style={{ display:'grid', gridTemplateColumns:'340px 1fr', gap:'24px' }} className="results-grid">
+              <div className="dashboard-grid">
 
                 <div style={{ display:'flex', flexDirection:'column', gap:'18px' }}>
 
                   {/* Patient card */}
-                  <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', padding:'24px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'18px', paddingBottom:'14px', borderBottom:'1px solid #14142a' }}>
-                      <User size={15} color="#7c6bdb"/>
-                      <span style={{ fontSize:'12px', fontWeight:'800', color:'#555570', textTransform:'uppercase', letterSpacing:'0.07em' }}>{s('patient')}</span>
+                  <div className="info-card">
+                    <div className="section-title-group">
+                      <User size={16} className="section-icon"/>
+                      <span className="section-label">{s('patient')}</span>
                     </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
-                      <Field label={s('fullName')} value={result.patient?.name} accent="#c8c8e8"/>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                      <Field label={s('fullName')} value={result.patient?.name} accent/>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
                         <Field label={s('age')}    value={result.patient?.age}/>
                         <Field label={s('gender')} value={result.patient?.gender}/>
@@ -620,13 +532,13 @@ export default function App() {
                   </div>
 
                   {/* Doctor card */}
-                  <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', padding:'24px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'18px', paddingBottom:'14px', borderBottom:'1px solid #14142a' }}>
-                      <Stethoscope size={15} color="#7c6bdb"/>
-                      <span style={{ fontSize:'12px', fontWeight:'800', color:'#555570', textTransform:'uppercase', letterSpacing:'0.07em' }}>{s('doctor')}</span>
+                  <div className="info-card">
+                    <div className="section-title-group">
+                      <Stethoscope size={16} className="section-icon"/>
+                      <span className="section-label">{s('doctor')}</span>
                     </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
-                      <Field label={s('name')} value={result.doctor?.name} accent="#c8c8e8"/>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                      <Field label={s('name')} value={result.doctor?.name} accent/>
                       <Field label={s('spec')} value={result.doctor?.specialization}/>
                       <Field label={s('reg')}  value={result.doctor?.registration}/>
                     </div>
@@ -634,29 +546,25 @@ export default function App() {
 
                   {/* Diagnosis */}
                   {result.diagnosis?.length > 0 && (
-                    <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', padding:'24px' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'18px', paddingBottom:'14px', borderBottom:'1px solid #14142a' }}>
-                        <Activity size={15} color="#7c6bdb"/>
-                        <span style={{ fontSize:'12px', fontWeight:'800', color:'#555570', textTransform:'uppercase', letterSpacing:'0.07em' }}>{s('diagnosisSec')}</span>
+                    <div className="info-card">
+                      <div className="section-title-group">
+                        <Activity size={16} className="section-icon"/>
+                        <span className="section-label">{s('diagnosisSec')}</span>
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
                         {result.diagnosis.map((d, i) => (
-                          <span key={i} style={{
-                            padding:'5px 12px', borderRadius:'20px',
-                            background:'rgba(124,107,219,0.08)', border:'1px solid rgba(124,107,219,0.2)',
-                            color:'#a89af0', fontSize:'13px', fontWeight:'600'
-                          }}>{d}</span>
+                          <span key={i} className="feature-pill" style={{ color: 'var(--dark)' }}>{d}</span>
                         ))}
                       </div>
                     </div>
                   )}
 
                   {/* Confidence ring */}
-                  <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', padding:'24px', display:'flex', alignItems:'center', gap:'20px' }}>
+                  <div className="info-card" style={{ display:'flex', alignItems:'center', gap:'20px' }}>
                     <ConfRing value={result.confidence || 0.95}/>
                     <div>
-                      <div style={{ fontSize:'13px', fontWeight:'800', color:'#c8c8e8', marginBottom:'4px' }}>{s('aiConf')}</div>
-                      <div style={{ fontSize:'12px', color:'#555570', lineHeight:1.5 }}>
+                      <div style={{ fontSize:'14px', fontWeight:'800', color:'var(--dark)', marginBottom:'4px' }}>{s('aiConf')}</div>
+                      <div style={{ fontSize:'12px', color:'var(--text-secondary)', lineHeight:1.5 }}>
                         {(result.confidence || 0.95) > 0.9 ? s('highConf') : s('modConf')}
                       </div>
                     </div>
@@ -664,20 +572,22 @@ export default function App() {
                 </div>
 
                 {/* Medicines */}
-                <div style={{ background:'#0e0e20', border:'1px solid #1a1a30', borderRadius:'20px', padding:'28px' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'24px', paddingBottom:'16px', borderBottom:'1px solid #14142a' }}>
-                    <Pill size={15} color="#7c6bdb"/>
-                    <span style={{ fontSize:'12px', fontWeight:'800', color:'#555570', textTransform:'uppercase', letterSpacing:'0.07em' }}>{s('medications')}</span>
-                    <span style={{ marginLeft:'auto', padding:'3px 10px', borderRadius:'20px', background:'rgba(124,107,219,0.1)', color:'#7c6bdb', fontSize:'11px', fontWeight:'700' }}>
-                      {result.medicines?.length || 0} {s('found')}
-                    </span>
+                <div className="info-card">
+                  <div className="section-title-group">
+                    <Pill size={16} className="section-icon"/>
+                    <span className="section-label">{s('medications')}</span>
+                    <span style={{ 
+                      marginLeft:'auto', padding:'4px 12px', borderRadius:'20px', 
+                      background:'var(--bg-secondary)', color:'var(--dark)', 
+                      fontSize:'11px', fontWeight:'800' 
+                    }}>{result.medicines?.length || 0} {s('found')}</span>
                   </div>
                   {result.medicines?.length ? (
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:'16px' }}>
+                    <div className="medicine-list">
                       {result.medicines.map((m, i) => <MedCard key={i} med={m} idx={i} lang={lang}/>)}
                     </div>
                   ) : (
-                    <div style={{ textAlign:'center', padding:'60px 0', color:'#333350' }}>
+                    <div style={{ textAlign:'center', padding:'60px 0', color:'var(--text-muted)' }}>
                       <Pill size={40} style={{ marginBottom:'12px', opacity:0.3 }}/>
                       <p style={{ fontSize:'14px' }}>{s('noMeds')}</p>
                     </div>
@@ -692,7 +602,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer style={{ textAlign:'center', padding:'40px 24px', borderTop:'1px solid #0f0f20', color:'#333350', fontSize:'13px', fontWeight:'600' }}>
+      <footer className="main-footer">
         {s('footer')}
       </footer>
 

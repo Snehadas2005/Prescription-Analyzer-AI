@@ -113,7 +113,20 @@ h1, h2, h3, h4 {
 }
 
 .logo-accent {
-  color: #7c6bdb; /* We can keep this purple or change to a navy shade */
+  color: #7c6bdb;
+}
+
+.detected-badge {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 1px solid var(--primary);
+  color: var(--dark);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* --- Phase Styling --- */
@@ -427,6 +440,40 @@ h1, h2, h3, h4 {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  font-family: inherit;
+}
+
+.lang-dropdown {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: var(--white);
+  border: 1.5px solid var(--primary);
+  border-radius: 14px;
+  padding: 6px;
+  z-index: 100;
+  min-width: 170px;
+  box-shadow: var(--shadow-expensive);
+}
+
+.lang-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--dark);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.lang-option.active {
+  background: var(--bg-secondary);
 }
 
 .tts-btn {
@@ -441,6 +488,7 @@ h1, h2, h3, h4 {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  font-family: inherit;
 }
 
 .tts-btn.active {
@@ -467,6 +515,41 @@ h1, h2, h3, h4 {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+/* Spinner logic */
+.spinner-container {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  margin-bottom: 40px;
+}
+
+.spinner-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+/* Confidence Ring */
+.conf-ring {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+}
+
+.conf-ring-svg {
+  transform: rotate(-90deg);
+}
+
+.conf-ring-text-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* --- Raw Text --- */
