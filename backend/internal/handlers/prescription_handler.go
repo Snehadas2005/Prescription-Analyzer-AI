@@ -54,7 +54,7 @@ func (h *PrescriptionHandler) callMLService(imageBytes []byte) (*MLExtractionRes
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call ML service: %w", err)

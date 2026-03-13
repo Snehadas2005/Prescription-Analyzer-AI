@@ -198,13 +198,6 @@ models/checkpoints/
 *.onnx
 *.pb
 
-# Training data
-data/raw/
-data/processed/
-data/training/
-data/feedback/
-medicine_database.pkl
-
 # Backups
 backups/
 *.backup
