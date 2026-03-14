@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 MAX_IMAGE_PX      = 2000
-GEMINI_MODEL      = "gemini-2.5-flash-lite"
+GEMINI_MODEL      = "gemini-2.0-flash"
 MAX_OUTPUT_TOKENS = 1500
 TEMPERATURE       = 0.1
 RATE_LIMIT_RPM    = 5
@@ -838,8 +838,13 @@ Set detected_language to: "hi" for Hindi, "en" for English, "hi-en" for mixed.
             if src.get("date") and not result["date"]:
                 result["date"] = src["date"]
 
-            if src.get("detected_language") and not result["detected_language"]:
-                result["detected_language"] = src["detected_language"]
+            incoming_lang = src.get("detected_language", "")
+            current_lang = result["detected_language"]
+            if incoming_lang:
+                if not current_lang:
+                    result["detected_language"] = incoming_lang
+                elif incoming_lang in ("hi", "hi-en") and current_lang == "en":
+                    result["detected_language"] = incoming_lang  # Hindi overrides English
 
         return result
 
