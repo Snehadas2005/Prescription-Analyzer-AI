@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 MAX_IMAGE_PX      = 2000
 GEMINI_MODEL      = "gemini-2.5-flash-lite"
-MAX_OUTPUT_TOKENS = 800
+MAX_OUTPUT_TOKENS = 1200
 TEMPERATURE       = 0.1
 RATE_LIMIT_RPM    = 5
 CACHE_MAX_SIZE    = 200
@@ -257,38 +257,38 @@ class _RateLimiter:
 class PrescriptionAnalyzer:
 
     _USER_PROMPT = """
-Read this prescription image carefully.
+Read this prescription image carefully. It may be written in Hindi (Devanagari), English, or a mix of both.
 
-Focus especially on:
+Extract ALL of the following:
 
-1. Doctor name in the printed letterhead
-2. Patient name written by hand near the top
-3. Age and gender near the name
-4. Medicine list
-5. Diagnosis
+1. Doctor name from the printed letterhead at the top (exclude "Dr.", "डॉ.", titles)
+2. Patient name — the first handwritten name (may be in Hindi or English)
+3. Age and gender near the patient name
+4. All medicines — look for: टेब/Tab, केप/Cap, टेबलेट/Tablet, सिरप/Syrup, इंज/Inj
+5. Diagnosis/complaints — look for: c/o, C/O, शिकायत, निदान
+6. Frequency shortcodes to expand: od→Once daily, bd→Twice daily (Morning & Night), tid/tds→Three times daily, SOS→Take only during emergency (SOS), hs→At bedtime
 
-Return ONLY JSON using this schema:
+For Hindi prescriptions specifically:
+- Patient name written in Devanagari: extract as-is (e.g. "रामकिसन")  
+- Medicine names are often English brand names written in Hindi script or Roman
+- Duration like "×2" or circled ② = 2 weeks
+- Rows often have: medicine name | dose | frequency columns
+
+Return ONLY this JSON structure, no markdown:
 
 {
   "patient": {"name": "", "age": "", "gender": ""},
   "doctor": {"name": "", "specialization": "", "registration_number": ""},
-  "medicines": [],
+  "medicines": [
+    {"name": "", "dosage": "", "frequency": "", "duration": "", "instructions": "", "quantity": "1"}
+  ],
   "diagnosis": [],
   "vitals": {"bp": "", "weight": ""},
-  "date": ""
+  "date": "",
+  "detected_language": "en"
 }
 
-Important rules:
-
-Doctor name is printed in the letterhead.
-
-Patient name is handwritten near the top.
-
-Example:
-"Banani 47" → name="Banani", age="47"
-
-Example:
-"Sneha Das 17/F" → name="Sneha Das", age="17", gender="Female"
+Set detected_language to: "hi" for Hindi, "en" for English, "hi-en" for mixed.
 """
 
     def __init__(self, cohere_api_key: Optional[str] = None):
@@ -367,12 +367,14 @@ Example:
                     return self._build_result(pid, cached, "gemini-vision[cached]")
                 self._limiter.wait_if_needed()
                 
-                header, body, meds_region = self._split_prescription_regions(img)
-                data_h = self._gemini_extract(header)
-                data_b = self._gemini_extract(body)
-                data_m = self._gemini_extract(meds_region)
+                # REPLACED: single full-image call instead of 3 cropped regions
+                data = self._gemini_extract(img)
                 
-                data = self._merge_gemini_results(data_h, data_b, data_m)
+                if not data:
+                    # fallback: try with enhanced contrast for dense Hindi handwriting
+                    enhanced = self._enhance_for_hindi(img)
+                    data = self._gemini_extract(enhanced)
+                
                 if data:
                     self._cache.set(img_hash, data)
                     logger.info(self._cache.stats())
@@ -636,6 +638,14 @@ Example:
             cv2.THRESH_BINARY, 35, 11
         )
         return th
+
+    def _enhance_for_hindi(self, img: np.ndarray) -> np.ndarray:
+        """Boost contrast for dense Devanagari handwriting."""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img.copy()
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        # Convert back to BGR for Gemini
+        return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
 
     def _run_ocr(self, img: np.ndarray) -> Tuple[str, float]:
         best=("",0.0)
