@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 MAX_IMAGE_PX      = 2000
 GEMINI_MODEL      = "gemini-2.5-flash-lite"
-MAX_OUTPUT_TOKENS = 1200
+MAX_OUTPUT_TOKENS = 1500
 TEMPERATURE       = 0.1
 RATE_LIMIT_RPM    = 5
 CACHE_MAX_SIZE    = 200

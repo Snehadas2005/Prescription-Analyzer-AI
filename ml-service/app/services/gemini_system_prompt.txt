@@ -65,6 +65,14 @@ doctor.registration_number (if visible)
 
 RULE: Exclude titles like "Dr.", "(Mrs.)", "(Prof.)" from the name field.
 
+SPECIALIZATION RULES:
+- Specialization is the DEPARTMENT or FIELD, not the degree
+- "M.D., PGDHHM" is a DEGREE — not a specialization
+- "Radiation Oncology" / "Deptt. of Radiation Oncology" → specialization = "Radiation Oncology"  
+- "OBSTETRICIAN & GYNAECOLOGIST" → specialization = "Obstetrician & Gynaecologist"
+- Degrees like MBBS, MD, MS, DGO, PGDHHM go in a separate field, NOT specialization
+- Look for "Deptt." or department name for the actual specialization
+
 Examples:
 - "Dr. (Mrs.) Sunita Mehta" → name = "Sunita Mehta"
 - "डॉ. रामेश्वर प्रसाद" → name = "रामेश्वर प्रसाद"
@@ -119,6 +127,22 @@ Examples:
 
 --------------------------------
 
+DIETARY INSTRUCTIONS vs DIAGNOSIS
+
+CRITICAL: Do NOT include dietary/lifestyle instructions in the diagnosis field.
+
+Dietary advice patterns to IGNORE for diagnosis:
+- Food items: छैना, पेठा, आम, पपीता, छाछ, दूध, किशमिश, मुनक्का
+- Lifestyle: पानी पीना, खाली पेट, कुल्ला करना, Exercise, तम्बाकू बन्द
+- These appear on the LEFT side of the prescription as printed/handwritten advice
+
+Diagnosis should ONLY contain:
+- Named medical conditions (e.g. "Acute Febrile Illness", "Disc Prolapse")
+- Symptoms after c/o or शिकायत markers
+- If no clear diagnosis is written, return empty array []
+
+--------------------------------
+
 VITALS (NOT MEDICINES)
 
 Vitals may appear in the patient section. These are NOT medicines.
@@ -138,6 +162,26 @@ Medicine section often begins after:
 Medicines are often written as numbered items.
 
 Always extract ALL medicines — even if partially readable.
+
+MEDICINE NAME RULES FOR HINDI PRESCRIPTIONS:
+
+When medicines are written in Hindi/Devanagari script, they are phonetic 
+spellings of English brand names. You MUST convert them back to the English 
+brand name:
+
+- टेब / टेबी / टेबलेट = "Tab" prefix (not a medicine name)
+- केप / कैप = "Cap" prefix (not a medicine name)
+- सिरप / शरबत = "Syrup" prefix
+- डेफकोर्ट / Defcort = corticosteroid (6mg)
+- पेन-डी / Pan-D / Pantoprazole = gastric medicine
+- वायसोलोन / Wysolone = prednisolone steroid
+- लाइकोस्टार / Lycostar = multivitamin supplement
+- टेक्साकाइंड / Texakind = tranexamic acid
+- लिव.52 / Liv.52 = liver supplement
+
+ALWAYS output medicine names in English (brand or generic), not in Hindi script.
+Even if written as "डेफकोर्ट" → output "Defcort"
+Even if written as "वायसोलोन" → output "Wysolone"
 
 --------------------------------
 
