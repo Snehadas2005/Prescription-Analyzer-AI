@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 MAX_IMAGE_PX      = 2000
-GEMINI_MODEL      = "gemini-2.0-flash"
+GEMINI_MODEL      = "gemini-2.5-flash-lite"
 MAX_OUTPUT_TOKENS = 1500
 TEMPERATURE       = 0.1
 RATE_LIMIT_RPM    = 5
@@ -380,13 +380,14 @@ Set detected_language to: "hi" for Hindi, "en" for English, "hi-en" for mixed.
                     logger.info(self._cache.stats())
                     return self._build_result(pid, data, "gemini-vision")
 
-            # PATH 2 — Cohere + OCR
+            # PATH 2 — Cohere fallback (when Gemini quota exhausted)
+            # Since Cohere can't do vision, use basic OCR preprocessing description
             proc = self._preprocess(img)
             raw_text, ocr_conf = self._run_ocr(proc)
             text = self._clean_text(raw_text)
-            logger.info("OCR: %d chars, conf=%.2f", len(text), ocr_conf)
+            logger.info("OCR fallback: %d chars, conf=%.2f", len(text), ocr_conf)
 
-            if self._cohere and text:
+            if self._cohere and text and len(text) > 20:
                 data = self._cohere_extract(text)
                 if data:
                     return self._build_result(pid, data, "cohere",
@@ -412,61 +413,55 @@ Set detected_language to: "hi" for Hindi, "en" for English, "hi-en" for mixed.
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img_rgb)
 
-        try:
-            response = self._gemini.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[self._USER_PROMPT, pil_img],
-                config=_genai_types.GenerateContentConfig(
-                    system_instruction=self._sys_prompt,
-                    temperature=TEMPERATURE,
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
-                ),
-            )
-
-            raw = (response.text or "").strip()
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
-
-            s, e = raw.find("{"), raw.rfind("}")
-            if s == -1 or e == -1:
-                logger.warning("Gemini returned no JSON. Raw: %s", raw[:200])
-                return None
-
-            json_str = raw[s:e+1]
-            # fix common model formatting errors
-            json_str = json_str.replace("\n", " ")
-            json_str = re.sub(r",\s*}", "}", json_str)
-            json_str = re.sub(r",\s*]", "]", json_str)
-
+        for attempt in range(3):
             try:
-                data = json.loads(json_str)
-            except json.JSONDecodeError:
-                logger.warning("Gemini JSON repair attempt")
-                json_str = re.sub(r"(\w+):", r'"\1":', json_str)
-                data = json.loads(json_str)
+                response = self._gemini.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=[self._USER_PROMPT, pil_img],
+                    config=_genai_types.GenerateContentConfig(
+                        system_instruction=self._sys_prompt,
+                        temperature=TEMPERATURE,
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
+                    ),
+                )
+                raw = (response.text or "").strip()
+                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+                s, e = raw.find("{"), raw.rfind("}")
+                if s == -1 or e == -1:
+                    logger.warning("Gemini returned no JSON. Raw: %s", raw[:200])
+                    return None
+                json_str = raw[s:e+1]
+                json_str = json_str.replace("\n", " ")
+                json_str = re.sub(r",\s*}", "}", json_str)
+                json_str = re.sub(r",\s*]", "]", json_str)
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError:
+                    json_str = re.sub(r"(\w+):", r'"\1":', json_str)
+                    data = json.loads(json_str)
+                data["_source"] = "gemini-vision"
+                return data
 
-            data["_source"] = "gemini-vision"
-            logger.info(
-                "Gemini → patient=%r doctor=%r meds=%d diag=%s",
-                data.get("patient", {}).get("name"),
-                data.get("doctor", {}).get("name"),
-                len(data.get("medicines", [])),
-                data.get("diagnosis", []),
-            )
-            return data
-
-        except Exception as exc:
-            msg = str(exc).lower()
-
-            if "404" in msg or "not found" in msg:
-                logger.warning("⚠ Gemini model not found: %s", exc)
-            elif "403" in msg or "api key" in msg or "permission" in msg:
-                logger.warning("⚠ Gemini auth error: %s", exc)
-            elif "429" in msg or "quota" in msg or "too many requests" in msg or "rate limit" in msg:
-                logger.warning("⚠ Gemini rate limit error: %s", exc)
-            else:
-                logger.warning("⚠ Gemini error: %s", exc)
-
-            return None
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "429" in msg or "quota" in msg or "rate limit" in msg or "resource_exhausted" in msg:
+                    wait_times = [20, 40, 60]
+                    wait = wait_times[attempt] if attempt < len(wait_times) else 60
+                    logger.warning("⚠ Gemini 429 attempt %d/%d — sleeping %ds", attempt+1, 3, wait)
+                    time.sleep(wait)
+                    if attempt == 2:
+                        logger.error("Gemini quota exhausted after 3 attempts — giving up")
+                        return None  # caller will try Cohere
+                elif "404" in msg or "not found" in msg:
+                    logger.warning("⚠ Gemini model not found: %s", exc)
+                    return None
+                elif "403" in msg or "api key" in msg:
+                    logger.warning("⚠ Gemini auth error: %s", exc)
+                    return None
+                else:
+                    logger.warning("⚠ Gemini error: %s", exc)
+                    return None
+        return None
 
 
     def _cohere_extract(self, text: str) -> Optional[Dict]:
