@@ -1,5 +1,6 @@
 # Prescription Analyzer AI
 
+**🔴 Live Demo:** [https://prescriptionanalyzer.vercel.app/](https://prescriptionanalyzer.vercel.app/)
 A high-performance AI-powered system designed to analyze and extract information from handwritten and digital prescriptions. Utilizing **Gemini 2.0 Flash Vision**, this system achieves near-human accuracy in reading complex multi-line handwritten medical data.
 
 ---
@@ -29,9 +30,10 @@ graph TD
 ## 🌟 Key Features
 
 - **🎯 Industrial-Grade Extraction**: Precisely extracts patient demographics, doctor metadata, clinical diagnosis, and full medication tables.
-- **✍️ Handwriting Intelligence**: Specifically engineered for the nuances of Indian medical handwriting, supporting shorthand like `bd`, `od`, `TDS`, `SOS`, and symbolic dot-line frequencies.
+- **✍️ Handwriting Intelligence**: Specifically engineered for the nuances of Indian medical handwriting (including Hindi scripts), supporting shorthand like `bd`, `od`, `TDS`, `SOS`, and symbolic dot-line frequencies.
+- **🌐 Native Hindi Translation**: Built-in feature to support analyzing full Hindi prescriptions (with auto contrast enhancements) and toggling real-time translations on the frontend.
 - **⚡ Stateless & Secure**: Designed for privacy with a stateless flow—images are processed and discarded immediately after extraction.
-- **📊 Real-time Confidence**: Every result is accompanied by an AI confidence score, ensuring clinicians can verify results with transparency.
+- **📊 Real-time Confidence**: Every result is accompanied by AI confidence scores and accuracy rates, ensuring clinicians can verify results transparently.
 
 ---
 
@@ -112,7 +114,7 @@ npm run dev
 
 1.  **♿ Accessibility First**: Implementation of Text-to-Speech (TTS) for automatic dosage reading.
 2.  **🎨 Color Assist**: High-contrast and color-blind optimized UI themes.
-3.  **🇮🇳 Polyglot Extraction**: Support for regional Indian scripts (Hindi, Bengali, etc.) in handwriting.
+3.  **🇮🇳 Expanded Regional Support**: Extending existing Hindi prescription support to other scripts like Bengali, Tamil, etc.
 4.  **🏥 Safety Layer**: Real-time checking for drug-to-drug interactions (DDIs).
 5.  **📱 Ecosystem Sync**: Integration with HealthStacks (Apple Health / Google Fit).
 

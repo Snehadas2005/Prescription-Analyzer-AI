@@ -72,6 +72,18 @@ This document serves as a comprehensive log of the technical challenges faced an
     *   `Adv.` = start of medicine list
     *   `SOS` = emergency use only
 
+### 13. Fragmentation & Data Loss on Hindi Prescriptions
+*   **Cause**: Splitting prescriptions into regional crop regions before passing them to the AI was stripping context, especially in Hindi scripts where text continues across visual boundaries. Also, low contrast caused poor OCR logic.
+*   **Fix**: Modified the architecture to send the full, uncropped image directly to Gemini 2.0 Flash Vision. Introduced `_enhance_for_hindi` utility that applies adaptive contrast adjustments to highlight faded script.
+
+### 14. Support for Regional Translations
+*   **Cause**: No ability to read results in languages other than English, limiting accessibility for Indian users.
+*   **Fix**: Added a fully integrated translation pipeline. The frontend now features a language toggle to dynamically translate extracted prescription text into Hindi on the fly, using specific UI overlay states for seamless UX.
+
+### 15. Premium Landing Page Dynamics & CSS Discrepancies
+*   **Cause**: React stylesheet application was overriding and breaking standard page CSS when navigating away from the landing page.
+*   **Fix**: Hardened Vite+React CSS architecture, ensuring correct class isolation. Deployed advanced scroll-trigger animations (via GSAP and CSS) specifically for `home.css` elements to ensure a responsive, high-end "WOW" factor.
+
 ---
 
 ## Architecture Refactor
@@ -133,6 +145,7 @@ This document serves as a comprehensive log of the technical challenges faced an
 | **Diagnosis** | Empty | Pain Vagina, Cold |
 | **Engine** | Tesseract only | Gemini 2.0 Flash Vision |
 | **API cost** | Paid (Anthropic) | Free (Gemini) |
+| **Language Support** | English Only | English + Native Hindi |
 
 ---
 *Maintained by Sneha Das*

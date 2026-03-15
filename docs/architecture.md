@@ -26,8 +26,8 @@ The system is divided into three primary layers:
 ### 3. ML Service (Python/FastAPI)
 - **Role**: Heavy-duty Medical Intelligence.
 - **Key Models**:
-  - **TrOCR (Transformer-based OCR)**: State-of-the-art handwriting recognition.
-  - **Biomedical NER (`d4data/biomedical-ner-all`)**: Extracts clinical entities like medical symptoms, medicines, and dosages.
+  - **Gemini 2.0 Flash Vision (Primary)**: State-of-the-art vision model for handwriting recognition and entity extraction across full prescription images.
+  - **Cohere Command-R Plus (Secondary)**: Fallback model.
 - **Deployment**: Railway.
 
 ## 🔄 Data Flow
@@ -35,8 +35,9 @@ The system is divided into three primary layers:
 1.  **Ingestion**: User uploads a prescription image via the React frontend.
 2.  **Orchestration**: The Go backend receives the file, stores it, and sends a processing request to the ML service.
 3.  **Analysis**:
-    - The Python service applies TrOCR to convert handwriting to digital text.
-    - The digital text is passed through the NER model to identify medical entities.
+    - The Python service applies preprocessing (e.g., contrast enhancement for regional scripts like Hindi).
+    - The processed image is sent directly to Gemini 2.0 Flash Vision to concurrently extract text and clinical entities like symptoms, medicines, and dosages.
+    - Confidence scores and translated data are integrated into the output.
 4.  **Persistence**: Results are returned to the Go backend and persisted in MongoDB.
 5.  **Visualization**: The backend responds to the frontend with a structured JSON, which is then rendered for the user.
 
