@@ -512,9 +512,9 @@ export default function App() {
                         color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'
                       }}><X size={16}/></button>
                     </div>
-                    <div style={{ display:'flex', gap:'12px' }}>
-                      <button onClick={reset} className="btn-base btn-outline" style={{ flex: 1 }}>{s('change')}</button>
-                      <button onClick={analyze} className="btn-base btn-primary" style={{ flex: 2 }}>{s('analyze')}</button>
+                    <div className="upload-actions">
+                      <button onClick={reset} className="btn-base btn-outline">{s('change')}</button>
+                      <button onClick={analyze} className="btn-base btn-primary">{s('analyze')}</button>
                     </div>
                   </div>
                 )}
@@ -582,7 +582,7 @@ export default function App() {
                   <div className="status-dot" />
                   <span style={{ fontWeight:'700', color:'var(--dark)' }}>{s('done')}</span>
                 </div>
-                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', alignItems: 'center' }}>
+                <div className="results-actions">
                   <TTSButton result={currentResult} lang={lang}/>
                   <button onClick={reset} className="btn-base btn-outline">{s('newScan')}</button>
                 </div>
@@ -697,10 +697,6 @@ export default function App() {
       <footer className="main-footer">
         {s('footer')}
       </footer>
-
-      <style>{`
-        @media (max-width: 768px) { .results-grid { grid-template-columns: 1fr !important; } }
-      `}</style>
     </div>
   );
 }
